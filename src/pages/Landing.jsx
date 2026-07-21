@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
-  Store, UtensilsCrossed, Stethoscope, Pill, Briefcase, Warehouse,
+  Store, UtensilsCrossed, Scissors, Pill, Wrench, Warehouse,
   ArrowRight, ShieldCheck, Zap, Receipt, BarChart3, IndianRupee, ArrowUpRight,
 } from "lucide-react";
 
@@ -15,14 +15,14 @@ const INDUSTRIES = [
     img: "https://images.unsplash.com/photo-1647427017067-8f33ccbae493?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2MzR8MHwxfHNlYXJjaHwzfHxyZXN0YXVyYW50JTIwcG9zJTIwbWFjaGluZXxlbnwwfHx8fDE3ODQzMTc0NTB8MA&ixlib=rb-4.1.0&q=85",
   },
   {
-    icon: Stethoscope, label: "Hospitals & Clinics",
-    img: "https://images.unsplash.com/photo-1764727291644-5dcb0b1a0375",
+    icon: Scissors, label: "Textiles Shop",
+    img: "https://images.unsplash.com/photo-1590736969955-71cc94901144",
   },
   {
     icon: Pill, label: "Pharmacies",
     img: "https://images.unsplash.com/photo-1642055514517-7b52288890ec",
   },
-  { icon: Briefcase, label: "Service Businesses", img: null },
+  { icon: Wrench, label: "Hardware Shop", img: null },
   { icon: Warehouse, label: "Wholesale & Distribution", img: null },
 ];
 
@@ -31,7 +31,7 @@ const FEATURES = [
   { icon: Zap, title: "Fast POS Billing", desc: "Barcode scanning, hotkeys, thermal printer output. Bill in under 3 seconds." },
   { icon: Receipt, title: "Every Document Type", desc: "Tax invoices, quotations, proforma, credit/debit notes, sales & purchase returns." },
   { icon: BarChart3, title: "Actionable Reports", desc: "Real-time dashboard, profit margin, HSN summary, customer ledgers." },
-  { icon: ShieldCheck, title: "Role-Based Access", desc: "Owner, manager, cashier, accountant, doctor, pharmacist — controlled." },
+  { icon: ShieldCheck, title: "Role-Based Access", desc: "Owner, manager, cashier, accountant, tailor, pharmacist — controlled." },
 ];
 
 export default function Landing() {
@@ -80,7 +80,7 @@ export default function Landing() {
               GST billing built for <span className="text-[#1E3A8A]">every kind of business</span> in India.
             </h1>
             <p className="mt-8 text-lg lg:text-xl text-slate-600 max-w-2xl leading-relaxed">
-              Retail, restaurants, hospitals, pharmacies, service firms and wholesalers —
+              Retail, restaurants, textiles, pharmacies, hardware shops and wholesalers —
               all running on the same billing core. Invoice in seconds, file GST with
               confidence, and see your business in one dashboard.
             </p>

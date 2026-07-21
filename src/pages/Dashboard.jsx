@@ -12,7 +12,7 @@ import {
   ShoppingCart, TrendingUp, Wallet, CreditCard,
   ArrowUp, ArrowDown, Calendar, Eye, Printer,
   UserPlus, Package, ReceiptText, DollarSign, Users,
-  UtensilsCrossed, Stethoscope, Pill, Store, Warehouse, BarChart3,
+  UtensilsCrossed, Scissors, Pill, Store, Warehouse, BarChart3,
   Circle,
 } from "lucide-react";
 import {
@@ -83,7 +83,7 @@ export default function Dashboard() {
 
   const modules = [
     { label: "Restaurant POS", icon: UtensilsCrossed, active: true, to: "/app/restaurant" },
-    { label: "Hospital Billing", icon: Stethoscope, active: false, to: "/app/hospital" },
+    { label: "Alterations & Tailor", icon: Scissors, active: false, to: "/app/alterations" },
     { label: "Pharmacy", icon: Pill, active: false, to: "/app/pharmacy" },
     { label: "Retail POS", icon: Store, active: false, to: "/app/pos" },
     { label: "Inventory", icon: Warehouse, active: true, to: "/app/items" },

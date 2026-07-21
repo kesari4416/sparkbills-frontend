@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, fmtINR, formatApiError, API } from "@/lib/apiClient";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,6 +20,8 @@ import { toast } from "sonner";
 import {
   Plus, Utensils, ClipboardList, ChefHat, Send, Minus, X, Search,
   UtensilsCrossed, ShoppingBag, Truck, Wallet, PackageOpen, Bike,
+  CalendarClock, CheckCircle2, Users2, Armchair, Trash2,
+  Bell, HandPlatter, Timer,
 } from "lucide-react";
 
 const STATUS_COLORS = {
@@ -38,14 +41,31 @@ const ORDER_TYPES = [
   { id: "delivery", label: "Direct", icon: Truck },
 ];
 
+const todayStr = () => new Date().toISOString().slice(0, 10);
+
 export default function Restaurant() {
   const nav = useNavigate();
+  const { industry } = useAuth();
+  const useToken = industry === "cafe"; // Tea & Snacks Shop = token-based; Restaurant = table-based
   const [tables, setTables] = useState([]);
   const [kots, setKots] = useState([]);
   const [items, setItems] = useState([]);
   const [customers, setCustomers] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [reservations, setReservations] = useState([]);
+  const [selectedWaiter, setSelectedWaiter] = useState(() => localStorage.getItem("last_waiter_id") || "");
   const [openNewTable, setOpenNewTable] = useState(false);
   const [tblForm, setTblForm] = useState({ name: "", section: "Main", capacity: 4 });
+
+  // Floor Plan state
+  const [activeTab, setActiveTab] = useState("pos");
+  const [floorTab, setFloorTab] = useState("reservations");
+  const [resDate, setResDate] = useState(todayStr());
+  const [openBook, setOpenBook] = useState(false);
+  const [bookForm, setBookForm] = useState({
+    table_id: "", customer_name: "", customer_phone: "",
+    guest_count: 2, start_at: "", duration_min: 90, notes: "",
+  });
 
   const [selectedTable, setSelectedTable] = useState(null);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
@@ -59,14 +79,34 @@ export default function Restaurant() {
   const [deliveryFee, setDeliveryFee] = useState(0);
 
   const loadAll = async () => {
-    const [t, k, i, c] = await Promise.all([
+    const [t, k, i, c, r, u] = await Promise.all([
       api.get("/tables"), api.get("/kots"),
       api.get("/items", { params: { item_type: "menu" } }),
       api.get("/customers"),
+      api.get("/reservations", { params: { date: resDate } }),
+      api.get("/settings/users").catch(() => ({ data: [] })),
     ]);
     setTables(t.data); setKots(k.data); setItems(i.data); setCustomers(c.data);
+    setReservations(r.data); setUsers(u.data);
   };
-  useEffect(() => { loadAll(); }, []);
+  useEffect(() => { loadAll(); }, [resDate]);
+  // Auto-refresh KDS + waiter board every 8s so kitchen/waiter see updates.
+  useEffect(() => {
+    const id = setInterval(async () => {
+      try {
+        const k = await api.get("/kots");
+        setKots(k.data);
+      } catch { /* ignore */ }
+    }, 8000);
+    return () => clearInterval(id);
+  }, []);
+
+  const waiterUsers = useMemo(
+    () => users.filter((u) => (u.industry_roles || {})["restaurant"] === "waiter"
+                          || (u.industry_roles || {})["cafe"] === "waiter"),
+    [users],
+  );
+  const waiterName = (id) => users.find((u) => u.id === id)?.name || "";
 
   const categories = useMemo(() => {
     const map = new Map();
@@ -151,15 +191,20 @@ export default function Restaurant() {
 
   const sendKotOnly = async () => {
     if (!cart.length) return toast.error("Add items first");
+    if (!useToken && !selectedTable) return toast.error("Select a table first");
     try {
-      await api.post("/kots", {
+      const { data } = await api.post("/kots", {
         table_id: selectedTable?.id || null,
         order_type: orderType,
         customer_name: selectedCustomer?.name || "",
         customer_phone: selectedCustomer?.phone || "",
+        waiter_id: selectedWaiter || null,
+        waiter_name: waiterName(selectedWaiter),
         items: cart,
       });
-      toast.success("KOT sent to kitchen");
+      const idLabel = useToken ? `Token ${data.token_no}` : `Table ${selectedTable?.name || "-"}`;
+      toast.success(`Order sent to kitchen · ${idLabel}${data.waiter_name ? ` · ${data.waiter_name}` : ""}`);
+      if (selectedWaiter) localStorage.setItem("last_waiter_id", selectedWaiter);
       loadAll();
       resetCart();
     } catch (e) { toast.error(formatApiError(e)); }
@@ -195,18 +240,75 @@ export default function Restaurant() {
   };
   const updKotStatus = async (k, status) => { await api.patch(`/kots/${k.id}/status`, { status }); loadAll(); };
 
+  // ============ Reservations & Table actions ============
+  const saveReservation = async () => {
+    if (!bookForm.customer_name.trim()) return toast.error("Customer name required");
+    if (!bookForm.start_at) return toast.error("Pick a date & time");
+    try {
+      await api.post("/reservations", {
+        table_id: bookForm.table_id || null,
+        customer_name: bookForm.customer_name.trim(),
+        customer_phone: bookForm.customer_phone.trim(),
+        guest_count: parseInt(bookForm.guest_count) || 1,
+        start_at: bookForm.start_at,
+        duration_min: parseInt(bookForm.duration_min) || 90,
+        notes: bookForm.notes,
+      });
+      toast.success("Table booked");
+      setOpenBook(false);
+      setBookForm({ table_id: "", customer_name: "", customer_phone: "", guest_count: 2, start_at: "", duration_min: 90, notes: "" });
+      loadAll();
+    } catch (e) { toast.error(formatApiError(e)); }
+  };
+  const setResStatus = async (r, status) => {
+    try { await api.patch(`/reservations/${r.id}/status`, { status }); loadAll(); }
+    catch (e) { toast.error(formatApiError(e)); }
+  };
+  const removeReservation = async (r) => {
+    if (!window.confirm(`Cancel reservation for ${r.customer_name}?`)) return;
+    try { await api.delete(`/reservations/${r.id}`); loadAll(); toast.success("Reservation removed"); }
+    catch (e) { toast.error(formatApiError(e)); }
+  };
+  const freeTable = async (t) => {
+    try { await api.patch(`/tables/${t.id}/free`); loadAll(); toast.success(`Table ${t.name} freed`); }
+    catch (e) { toast.error(formatApiError(e)); }
+  };
+
+  // If industry switches to cafe while we're on the Floor tab, jump back to POS.
+  useEffect(() => {
+    if (useToken && activeTab === "floor") setActiveTab("pos");
+  }, [useToken, activeTab]);
+
+  const availableTables = useMemo(() => tables.filter((t) => t.status !== "occupied"), [tables]);
+  const occupiedTables = useMemo(() => tables.filter((t) => t.status === "occupied"), [tables]);
+  const totalSeats = useMemo(() => tables.reduce((s, t) => s + (t.capacity || 0), 0), [tables]);
+  const occupiedSeats = useMemo(
+    () => occupiedTables.reduce((s, t) => s + (t.capacity || 0), 0),
+    [occupiedTables]
+  );
+
   return (
     <div className="p-6 lg:p-8" data-testid="restaurant-page">
       <div className="mb-4">
-        <div className="text-[10px] uppercase tracking-[0.3em] text-primary font-semibold">Restaurant / Café</div>
-        <h1 className="font-heading text-3xl font-bold tracking-tight mt-1">Point of Sale</h1>
+        <div className="text-[10px] uppercase tracking-[0.3em] text-primary font-semibold">{useToken ? "Tea & Snacks Shop" : "Restaurant / Café"}</div>
+        <h1 className="font-heading text-3xl font-bold tracking-tight mt-1">{useToken ? "Counter POS" : "Point of Sale"}</h1>
       </div>
 
-      <Tabs defaultValue="pos">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="rounded-md">
           <TabsTrigger value="pos" data-testid="tab-pos"><ClipboardList className="w-3.5 h-3.5 mr-2" />POS / New Order</TabsTrigger>
-          <TabsTrigger value="floor" data-testid="tab-floor"><Utensils className="w-3.5 h-3.5 mr-2" />Floor Plan</TabsTrigger>
+          {!useToken && (
+            <TabsTrigger value="floor" data-testid="tab-floor"><Utensils className="w-3.5 h-3.5 mr-2" />Floor Plan</TabsTrigger>
+          )}
           <TabsTrigger value="kds" data-testid="tab-kds"><ChefHat className="w-3.5 h-3.5 mr-2" />Kitchen Display</TabsTrigger>
+          <TabsTrigger value="waiter" data-testid="tab-waiter">
+            <HandPlatter className="w-3.5 h-3.5 mr-2" />Waiter Board
+            {kots.filter((k) => k.status === "ready").length > 0 && (
+              <span className="ml-2 bg-emerald-500 text-white text-[9px] font-bold rounded-full px-1.5 py-0.5 leading-none">
+                {kots.filter((k) => k.status === "ready").length}
+              </span>
+            )}
+          </TabsTrigger>
         </TabsList>
 
         {/* ============== POS ============== */}
@@ -294,19 +396,37 @@ export default function Restaurant() {
             <Card className="col-span-4 rounded-xl overflow-hidden flex flex-col bg-card">
               <div className="px-4 py-3 border-b border-border">
                 <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">Current Order</div>
-                <div className="mt-2 grid grid-cols-2 gap-2">
-                  <Select value={selectedTable?.id || "none"} onValueChange={(v) => setSelectedTable(tables.find((t) => t.id === v) || null)}>
-                    <SelectTrigger className="rounded-md h-9 text-xs" data-testid="pos-table"><SelectValue placeholder="Select Table" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">No Table</SelectItem>
-                      {tables.map((t) => <SelectItem key={t.id} value={t.id}>Table {t.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                <div className={`mt-2 grid ${useToken ? "grid-cols-1" : "grid-cols-2"} gap-2`}>
+                  {!useToken && (
+                    <Select value={selectedTable?.id || "none"} onValueChange={(v) => setSelectedTable(tables.find((t) => t.id === v) || null)}>
+                      <SelectTrigger className="rounded-md h-9 text-xs" data-testid="pos-table"><SelectValue placeholder="Select Table" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No Table</SelectItem>
+                        {tables.map((t) => <SelectItem key={t.id} value={t.id}>Table {t.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  )}
                   <Select value={selectedCustomer?.id || "walkin"} onValueChange={(v) => setSelectedCustomer(customers.find((c) => c.id === v) || null)}>
                     <SelectTrigger className="rounded-md h-9 text-xs" data-testid="pos-customer"><SelectValue placeholder="Customer" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="walkin">Walk-in Customer</SelectItem>
                       {customers.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="mt-2">
+                  <Select value={selectedWaiter || "none"} onValueChange={(v) => setSelectedWaiter(v === "none" ? "" : v)}>
+                    <SelectTrigger className="rounded-md h-9 text-xs" data-testid="pos-waiter">
+                      <SelectValue placeholder="Assign waiter" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">— Unassigned —</SelectItem>
+                      {waiterUsers.length === 0 && users.map((u) => (
+                        <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                      ))}
+                      {waiterUsers.map((u) => (
+                        <SelectItem key={u.id} value={u.id}>{u.name} · Waiter</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -413,46 +533,200 @@ export default function Restaurant() {
 
         {/* ============== FLOOR PLAN ============== */}
         <TabsContent value="floor" className="mt-4">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex gap-4 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-slate-400" /> Available</span>
-              <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-primary" /> Occupied</span>
+          {/* Summary strip */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+            <SummaryTile testId="floor-total" icon={Utensils} label="Total tables" value={tables.length} />
+            <SummaryTile testId="floor-available" icon={CheckCircle2} label="Available" value={availableTables.length} tone="emerald" />
+            <SummaryTile testId="floor-occupied" icon={Users2} label="Occupied" value={occupiedTables.length} tone="rose" />
+            <SummaryTile testId="floor-seats" icon={Armchair} label="Seats in use" value={`${occupiedSeats} / ${totalSeats}`} tone="blue" />
+          </div>
+
+          <Tabs value={floorTab} onValueChange={setFloorTab}>
+            <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+              <TabsList className="rounded-md">
+                <TabsTrigger value="reservations" data-testid="floor-tab-reservations"><CalendarClock className="w-3.5 h-3.5 mr-2" />Time-based Booking</TabsTrigger>
+                <TabsTrigger value="available" data-testid="floor-tab-available"><CheckCircle2 className="w-3.5 h-3.5 mr-2" />Available</TabsTrigger>
+                <TabsTrigger value="occupied" data-testid="floor-tab-occupied"><Users2 className="w-3.5 h-3.5 mr-2" />Occupied</TabsTrigger>
+              </TabsList>
+              <div className="flex gap-2">
+                {floorTab === "reservations" && (
+                  <>
+                    <Input
+                      type="date" value={resDate} onChange={(e) => setResDate(e.target.value)}
+                      className="w-40 rounded-md h-9 text-sm" data-testid="floor-res-date"
+                    />
+                    <Button size="sm" className="rounded-md gap-2" onClick={() => setOpenBook(true)} data-testid="book-table-btn">
+                      <CalendarClock className="w-3.5 h-3.5" />Book Table
+                    </Button>
+                  </>
+                )}
+                <Dialog open={openNewTable} onOpenChange={setOpenNewTable}>
+                  <DialogTrigger asChild>
+                    <Button size="sm" variant="outline" className="rounded-md gap-2" data-testid="new-table-btn">
+                      <Plus className="w-3.5 h-3.5" />Add Table
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader><DialogTitle>Add Table</DialogTitle></DialogHeader>
+                    <div className="space-y-3">
+                      <div><Label>Name / No.</Label><Input value={tblForm.name} onChange={(e) => setTblForm({ ...tblForm, name: e.target.value })} className="rounded-md mt-1" data-testid="tbl-name" placeholder="T1" /></div>
+                      <div><Label>Section</Label><Input value={tblForm.section} onChange={(e) => setTblForm({ ...tblForm, section: e.target.value })} className="rounded-md mt-1" /></div>
+                      <div><Label>Chairs / Capacity</Label><Input type="number" value={tblForm.capacity} onChange={(e) => setTblForm({ ...tblForm, capacity: parseInt(e.target.value) || 4 })} className="rounded-md mt-1" /></div>
+                    </div>
+                    <DialogFooter><Button className="rounded-md" onClick={saveTable} data-testid="save-table">Save</Button></DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
             </div>
-            <Dialog open={openNewTable} onOpenChange={setOpenNewTable}>
-              <DialogTrigger asChild><Button size="sm" className="rounded-md gap-2" data-testid="new-table-btn"><Plus className="w-3.5 h-3.5" />Add Table</Button></DialogTrigger>
-              <DialogContent>
-                <DialogHeader><DialogTitle>Add Table</DialogTitle></DialogHeader>
-                <div className="space-y-3">
-                  <div><Label>Name / No.</Label><Input value={tblForm.name} onChange={(e) => setTblForm({ ...tblForm, name: e.target.value })} className="rounded-md mt-1" data-testid="tbl-name" placeholder="T1" /></div>
-                  <div><Label>Section</Label><Input value={tblForm.section} onChange={(e) => setTblForm({ ...tblForm, section: e.target.value })} className="rounded-md mt-1" /></div>
-                  <div><Label>Capacity</Label><Input type="number" value={tblForm.capacity} onChange={(e) => setTblForm({ ...tblForm, capacity: parseInt(e.target.value) || 4 })} className="rounded-md mt-1" /></div>
+
+            {/* ---- Reservations ---- */}
+            <TabsContent value="reservations">
+              {reservations.length === 0 ? (
+                <EmptyState icon={CalendarClock} title="No reservations for this date"
+                  hint="Click Book Table to add a time-based booking." />
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {reservations.map((r) => {
+                    const tbl = tables.find((t) => t.id === r.table_id);
+                    const when = new Date(r.start_at);
+                    const timeStr = isNaN(when) ? r.start_at : when.toLocaleString([], { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "short" });
+                    return (
+                      <Card key={r.id} className="p-4 rounded-xl card-elev" data-testid={`res-${r.id}`}>
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <div className="font-heading text-lg font-bold">{r.customer_name}</div>
+                            <div className="text-xs text-muted-foreground">{r.customer_phone || "No phone"}</div>
+                          </div>
+                          <Badge variant="outline" className={`rounded-md text-[10px] uppercase ${
+                            r.status === "seated" ? "chip-blue" :
+                              r.status === "completed" ? "chip-success" :
+                                r.status === "cancelled" || r.status === "no-show" ? "chip-danger" : "chip-warning"
+                          }`}>{r.status}</Badge>
+                        </div>
+                        <div className="flex items-center gap-3 mt-3 text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1"><CalendarClock className="w-3.5 h-3.5" />{timeStr}</span>
+                          <span className="flex items-center gap-1"><Users2 className="w-3.5 h-3.5" />{r.guest_count} guests</span>
+                          <span>{r.duration_min} min</span>
+                        </div>
+                        <div className="text-xs mt-2">
+                          {tbl ? <>Table <b>{tbl.name}</b> · {tbl.section}</> : <span className="text-muted-foreground">No table assigned</span>}
+                        </div>
+                        {r.notes && <div className="text-[11px] text-muted-foreground mt-1 italic">{r.notes}</div>}
+                        <div className="flex gap-1 mt-3">
+                          {r.status === "booked" && (
+                            <Button size="sm" className="rounded-md text-xs h-7 flex-1" onClick={() => setResStatus(r, "seated")} data-testid={`res-seat-${r.id}`}>Seat now</Button>
+                          )}
+                          {r.status === "seated" && (
+                            <Button size="sm" variant="outline" className="rounded-md text-xs h-7 flex-1" onClick={() => setResStatus(r, "completed")} data-testid={`res-complete-${r.id}`}>Mark done</Button>
+                          )}
+                          <Button size="sm" variant="ghost" className="rounded-md h-7 w-7 p-0 text-muted-foreground hover:text-destructive" onClick={() => removeReservation(r)} data-testid={`res-del-${r.id}`}>
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </Card>
+                    );
+                  })}
                 </div>
-                <DialogFooter><Button className="rounded-md" onClick={saveTable} data-testid="save-table">Save</Button></DialogFooter>
-              </DialogContent>
-            </Dialog>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-            {tables.map((t) => {
-              const occupied = t.status === "occupied";
-              const tKots = kots.filter((k) => k.table_id === t.id && k.status !== "cancelled" && k.status !== "billed");
-              return (
-                <Card key={t.id} className={`p-4 rounded-xl cursor-pointer transition-colors card-elev ${occupied ? "border-primary bg-primary/5" : "hover:border-primary/40"}`} data-testid={`table-${t.id}`}>
-                  <div className="flex items-center justify-between">
-                    <div className="font-heading text-2xl font-bold">{t.name}</div>
-                    <Badge variant="outline" className="rounded-md text-[10px] uppercase">{t.section}</Badge>
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-1">Seats {t.capacity}</div>
-                  <div className={`text-[10px] uppercase tracking-widest mt-3 font-semibold ${occupied ? "text-primary" : "text-muted-foreground"}`}>
-                    {t.status} {tKots.length > 0 && `· ${tKots.length} KOTs`}
-                  </div>
-                  <Button size="sm" className="w-full rounded-md text-xs mt-3" onClick={() => setSelectedTable(t)} data-testid={`order-${t.id}`}>Open Order</Button>
-                </Card>
-              );
-            })}
-            {tables.length === 0 && (
-              <div className="col-span-full text-center text-muted-foreground py-12">Add your first table to start.</div>
-            )}
-          </div>
+              )}
+            </TabsContent>
+
+            {/* ---- Available ---- */}
+            <TabsContent value="available">
+              {availableTables.length === 0 ? (
+                <EmptyState icon={CheckCircle2} title="No free tables right now" hint="All tables are seated or reserved." />
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                  {availableTables.map((t) => {
+                    const isReserved = !!t.reserved_by;
+                    return (
+                      <Card key={t.id} className={`p-4 rounded-xl card-elev border ${isReserved ? "border-amber-400/60 bg-amber-500/5" : "border-emerald-500/30 hover:border-emerald-500"} transition-colors`} data-testid={`avail-${t.id}`}>
+                        <div className="flex items-center justify-between">
+                          <div className="font-heading text-2xl font-bold">{t.name}</div>
+                          <Badge variant="outline" className="rounded-md text-[10px] uppercase">{t.section}</Badge>
+                        </div>
+                        <ChairRow total={t.capacity} used={0} />
+                        <div className={`text-[10px] uppercase tracking-widest mt-3 font-semibold ${isReserved ? "text-amber-600" : "text-emerald-600"}`}>
+                          {isReserved ? "Reserved" : "Available"}
+                        </div>
+                        <Button size="sm" className="w-full rounded-md text-xs mt-3" onClick={() => { setSelectedTable(t); setActiveTab("pos"); }} data-testid={`avail-open-${t.id}`}>Open order</Button>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </TabsContent>
+
+            {/* ---- Occupied ---- */}
+            <TabsContent value="occupied">
+              {occupiedTables.length === 0 ? (
+                <EmptyState icon={Users2} title="No occupied tables" hint="Everything is available." />
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                  {occupiedTables.map((t) => {
+                    const tKots = kots.filter((k) => k.table_id === t.id && k.status !== "cancelled" && k.status !== "billed");
+                    return (
+                      <Card key={t.id} className="p-4 rounded-xl border-primary bg-primary/5 card-elev" data-testid={`occupied-${t.id}`}>
+                        <div className="flex items-center justify-between">
+                          <div className="font-heading text-2xl font-bold text-primary">{t.name}</div>
+                          <Badge variant="outline" className="rounded-md text-[10px] uppercase chip-blue">{t.section}</Badge>
+                        </div>
+                        <ChairRow total={t.capacity} used={t.capacity} />
+                        <div className="text-[10px] uppercase tracking-widest mt-3 font-semibold text-primary">
+                          Occupied {tKots.length > 0 && `· ${tKots.length} KOTs`}
+                        </div>
+                        <div className="flex gap-1 mt-3">
+                          <Button size="sm" className="flex-1 rounded-md text-xs" onClick={() => { setSelectedTable(t); setActiveTab("pos"); }} data-testid={`occupied-open-${t.id}`}>Open</Button>
+                          <Button size="sm" variant="outline" className="rounded-md text-xs" onClick={() => freeTable(t)} data-testid={`occupied-free-${t.id}`}>Free</Button>
+                        </div>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
+
+          {/* Book Table dialog */}
+          <Dialog open={openBook} onOpenChange={setOpenBook}>
+            <DialogContent data-testid="book-dialog">
+              <DialogHeader><DialogTitle>Time-based Table Booking</DialogTitle></DialogHeader>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2"><Label>Customer Name</Label>
+                  <Input value={bookForm.customer_name} onChange={(e) => setBookForm({ ...bookForm, customer_name: e.target.value })} className="rounded-md mt-1" data-testid="book-name" />
+                </div>
+                <div><Label>Phone</Label>
+                  <Input value={bookForm.customer_phone} onChange={(e) => setBookForm({ ...bookForm, customer_phone: e.target.value })} className="rounded-md mt-1" data-testid="book-phone" />
+                </div>
+                <div><Label>Guests</Label>
+                  <Input type="number" min="1" value={bookForm.guest_count} onChange={(e) => setBookForm({ ...bookForm, guest_count: e.target.value })} className="rounded-md mt-1" data-testid="book-guests" />
+                </div>
+                <div><Label>Date & Time</Label>
+                  <Input type="datetime-local" value={bookForm.start_at} onChange={(e) => setBookForm({ ...bookForm, start_at: e.target.value })} className="rounded-md mt-1" data-testid="book-time" />
+                </div>
+                <div><Label>Duration (min)</Label>
+                  <Input type="number" value={bookForm.duration_min} onChange={(e) => setBookForm({ ...bookForm, duration_min: e.target.value })} className="rounded-md mt-1" data-testid="book-duration" />
+                </div>
+                <div className="col-span-2"><Label>Table (optional)</Label>
+                  <Select value={bookForm.table_id || "none"} onValueChange={(v) => setBookForm({ ...bookForm, table_id: v === "none" ? "" : v })}>
+                    <SelectTrigger className="rounded-md mt-1" data-testid="book-table"><SelectValue placeholder="Auto-assign" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Auto-assign / any table</SelectItem>
+                      {tables.map((t) => (
+                        <SelectItem key={t.id} value={t.id}>{t.name} · {t.section} · {t.capacity} chairs</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="col-span-2"><Label>Notes</Label>
+                  <Input value={bookForm.notes} onChange={(e) => setBookForm({ ...bookForm, notes: e.target.value })} placeholder="Birthday, high chair needed, etc." className="rounded-md mt-1" data-testid="book-notes" />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" className="rounded-md" onClick={() => setOpenBook(false)}>Cancel</Button>
+                <Button className="rounded-md" onClick={saveReservation} data-testid="book-save">Book Table</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
         {/* ============== KDS ============== */}
@@ -461,13 +735,26 @@ export default function Restaurant() {
             {["pending", "preparing", "ready"].map((s) => (
               <div key={s}>
                 <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-2">{s}</div>
-                {kots.filter((k) => k.status === s).map((k) => (
+                {kots.filter((k) => k.status === s).map((k) => {
+                  const tbl = tables.find((t) => t.id === k.table_id);
+                  const badgeText = useToken
+                    ? (k.token_no || "—")
+                    : (tbl ? `T ${tbl.name}` : (k.order_type === "dine-in" ? "—" : k.order_type.toUpperCase()));
+                  return (
                   <Card key={k.id} className="rounded-xl p-3 mb-2 card-elev" data-testid={`kds-${k.id}`}>
                     <div className="flex items-center justify-between">
-                      <div className="font-mono text-sm font-semibold">{k.kot_number}</div>
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center justify-center bg-primary text-primary-foreground font-heading font-bold rounded-md px-2.5 py-0.5 text-sm tabular" data-testid={`kds-badge-${k.id}`}>
+                          {badgeText}
+                        </span>
+                        <div className="font-mono text-xs text-muted-foreground">{k.kot_number}</div>
+                      </div>
                       <Badge variant="outline" className={`rounded-md text-[10px] uppercase font-semibold ${STATUS_COLORS[k.status]}`}>{k.status}</Badge>
                     </div>
-                    <div className="text-xs text-muted-foreground mt-1">{k.order_type} {k.table_id && `· Table`}</div>
+                    <div className="text-xs text-muted-foreground mt-1 flex items-center gap-2 flex-wrap">
+                      <span>{k.order_type}</span>
+                      {k.waiter_name && <span className="flex items-center gap-1"><HandPlatter className="w-3 h-3" />{k.waiter_name}</span>}
+                    </div>
                     <div className="mt-2 space-y-0.5 text-sm">
                       {k.items?.map((it, i) => (
                         <div key={i} className="flex justify-between">
@@ -477,17 +764,98 @@ export default function Restaurant() {
                       ))}
                     </div>
                     <div className="flex gap-1 mt-2">
-                      {s === "pending" && <Button size="sm" className="rounded-md text-xs h-7 flex-1" onClick={() => updKotStatus(k, "preparing")}>Start</Button>}
-                      {s === "preparing" && <Button size="sm" className="rounded-md text-xs h-7 flex-1" onClick={() => updKotStatus(k, "ready")}>Ready</Button>}
-                      {s === "ready" && <Button size="sm" className="rounded-md text-xs h-7 flex-1" onClick={() => updKotStatus(k, "served")}>Served</Button>}
+                      {s === "pending" && <Button size="sm" className="rounded-md text-xs h-7 flex-1" onClick={() => updKotStatus(k, "preparing")} data-testid={`kds-start-${k.id}`}>Start</Button>}
+                      {s === "preparing" && <Button size="sm" className="rounded-md text-xs h-7 flex-1 gap-1" onClick={() => updKotStatus(k, "ready")} data-testid={`kds-ready-${k.id}`}><Bell className="w-3 h-3" />Ready · Ring waiter</Button>}
+                      {s === "ready" && <Button size="sm" variant="outline" className="rounded-md text-xs h-7 flex-1" onClick={() => updKotStatus(k, "served")} data-testid={`kds-served-${k.id}`}>Served</Button>}
                     </div>
                   </Card>
-                ))}
+                );
+                })}
                 {kots.filter((k) => k.status === s).length === 0 && (
                   <div className="text-xs text-muted-foreground p-3">Empty</div>
                 )}
               </div>
             ))}
+          </div>
+        </TabsContent>
+        {/* ============== WAITER BOARD ============== */}
+        <TabsContent value="waiter" className="mt-4">
+          <div className="mb-3 text-xs text-muted-foreground">
+            {useToken
+              ? <>Customer orders at counter → <b>token issued</b> → kitchen prepares → marks <b className="text-emerald-600">Ready</b> → staff hands over to the customer holding the token.</>
+              : <>Waiter takes the order at the <b>table</b> → sends to kitchen → kitchen prepares → marks <b className="text-emerald-600">Ready</b> → waiter collects and serves the table.</>}
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {[
+              { key: "ready", label: "To collect (Kitchen ready)", tone: "emerald", icon: Bell, action: { next: "served", label: "Collected & Served" } },
+              { key: "preparing", label: "In the kitchen", tone: "amber", icon: Timer, action: null },
+              { key: "served", label: "Delivered recently", tone: "slate", icon: CheckCircle2, action: null },
+            ].map((col) => {
+              const list = kots.filter((k) => k.status === col.key).slice(0, 30);
+              const Icon = col.icon;
+              return (
+                <div key={col.key}>
+                  <div className={`flex items-center gap-2 mb-2 text-[10px] uppercase tracking-widest font-semibold ${
+                    col.tone === "emerald" ? "text-emerald-600" : col.tone === "amber" ? "text-amber-600" : "text-muted-foreground"
+                  }`}>
+                    <Icon className="w-3.5 h-3.5" />
+                    {col.label}
+                    <span className="ml-auto tabular">{list.length}</span>
+                  </div>
+                  {list.length === 0 ? (
+                    <div className="text-xs text-muted-foreground p-4 border border-dashed border-border rounded-lg text-center">
+                      {col.key === "ready" ? "No orders ready. Kitchen is cooking." : "Empty"}
+                    </div>
+                  ) : list.map((k) => {
+                    const tbl = tables.find((t) => t.id === k.table_id);
+                    const badgeText = useToken
+                      ? (k.token_no || "—")
+                      : (tbl ? `T ${tbl.name}` : (k.order_type === "dine-in" ? "—" : k.order_type.toUpperCase()));
+                    const subText = useToken
+                      ? (tbl ? `Table ${tbl.name}` : k.order_type)
+                      : (tbl ? tbl.section : k.order_type);
+                    return (
+                    <Card key={k.id} className={`rounded-xl p-3 mb-2 card-elev border ${col.key === "ready" ? "border-emerald-500/60 bg-emerald-500/5" : ""}`} data-testid={`waiter-card-${k.id}`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className={`inline-flex items-center justify-center font-heading font-bold rounded-md px-2.5 py-1 text-sm tabular ${col.key === "ready" ? "bg-emerald-500 text-white" : "bg-primary text-primary-foreground"}`} data-testid={`waiter-badge-${k.id}`}>
+                            {badgeText}
+                          </span>
+                          <div>
+                            <div className="font-mono text-xs text-muted-foreground">{k.kot_number}</div>
+                            <div className="text-[11px] text-muted-foreground">{subText}</div>
+                          </div>
+                        </div>
+                        {k.waiter_name && (
+                          <Badge variant="outline" className="rounded-md text-[10px] chip-blue gap-1">
+                            <HandPlatter className="w-3 h-3" />{k.waiter_name}
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="mt-2 space-y-0.5 text-sm">
+                        {k.items?.map((it, i) => (
+                          <div key={i} className="flex justify-between">
+                            <span className="truncate pr-2">{it.name}{it.variant ? ` (${it.variant})` : ""}</span>
+                            <span className="tabular font-medium">×{it.quantity}</span>
+                          </div>
+                        ))}
+                      </div>
+                      {col.action && (
+                        <Button
+                          size="sm"
+                          className="w-full rounded-md text-xs mt-3 gap-1"
+                          onClick={() => updKotStatus(k, col.action.next)}
+                          data-testid={`waiter-collect-${k.id}`}
+                        >
+                          <HandPlatter className="w-3.5 h-3.5" />{col.action.label}
+                        </Button>
+                      )}
+                    </Card>
+                  );
+                  })}
+                </div>
+              );
+            })}
           </div>
         </TabsContent>
       </Tabs>
@@ -555,6 +923,52 @@ function Row({ label, value }) {
     <div className="flex justify-between text-sm">
       <span className="text-muted-foreground">{label}</span>
       <span className="tabular font-medium">{fmtINR(value)}</span>
+    </div>
+  );
+}
+
+function SummaryTile({ icon: Icon, label, value, tone, testId }) {
+  const toneMap = {
+    emerald: "text-emerald-600 bg-emerald-500/10",
+    rose: "text-rose-600 bg-rose-500/10",
+    blue: "text-primary bg-primary/10",
+  };
+  const cls = toneMap[tone] || "text-muted-foreground bg-secondary";
+  return (
+    <div className="rounded-xl border border-border bg-card p-4 flex items-center gap-3" data-testid={testId}>
+      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${cls}`}>
+        <Icon className="w-5 h-5" strokeWidth={2} />
+      </div>
+      <div>
+        <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">{label}</div>
+        <div className="font-heading text-2xl font-bold tabular leading-tight">{value}</div>
+      </div>
+    </div>
+  );
+}
+
+function ChairRow({ total = 0, used = 0 }) {
+  const seats = Array.from({ length: Math.max(0, total) });
+  return (
+    <div className="flex items-center gap-1 mt-2 flex-wrap">
+      {seats.map((_, i) => (
+        <Armchair
+          key={i}
+          className={`w-4 h-4 ${i < used ? "text-primary" : "text-muted-foreground/40"}`}
+          strokeWidth={2}
+        />
+      ))}
+      <span className="text-[10px] text-muted-foreground ml-1 tabular">{used}/{total}</span>
+    </div>
+  );
+}
+
+function EmptyState({ icon: Icon, title, hint }) {
+  return (
+    <div className="text-center py-16 text-muted-foreground">
+      <Icon className="w-12 h-12 mx-auto opacity-30 mb-3" />
+      <div className="font-heading text-lg font-semibold">{title}</div>
+      {hint && <div className="text-xs mt-1">{hint}</div>}
     </div>
   );
 }

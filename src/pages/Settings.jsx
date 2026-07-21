@@ -20,24 +20,42 @@ import {
 import { toast } from "sonner";
 import { Building2, Users, Building, Plus, Save, Download, Bike, ShieldCheck } from "lucide-react";
 import { INDUSTRY_SUBROLES, SUBROLE_LABEL } from "@/lib/permissions";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function Settings() {
+  const { businessPerms } = useAuth();
+  const allowedInds = (businessPerms?.allowed_industries || []).filter(Boolean);
+  // Modules the tenant has enabled — used to render per-user permission grid.
+  const enabledModules = Object.entries(businessPerms?.modules || {})
+    .filter(([, on]) => on)
+    .map(([k]) => k);
+  const roleDefaults = businessPerms?.role_permissions || {};
+  // Build the Base Role option list from what the tenant's industries actually use.
+  const roleOptions = (() => {
+    const set = new Set(["owner", "admin"]);   // platform-side always available
+    const inds = allowedInds.length > 0 ? allowedInds : Object.keys(INDUSTRY_SUBROLES);
+    inds.forEach((i) => (INDUSTRY_SUBROLES[i] || []).forEach((r) => set.add(r)));
+    set.add("accountant"); // accountant applies across industries
+    return Array.from(set);
+  })();
+  const [catalog, setCatalog] = useState({ modules: {} });
   const [biz, setBiz] = useState({});
   const [branches, setBranches] = useState([]);
   const [users, setUsers] = useState([]);
   const [audit, setAudit] = useState([]);
   const [openU, setOpenU] = useState(false);
   const [openB, setOpenB] = useState(false);
-  const [openRoles, setOpenRoles] = useState(false);
-  const [editingUser, setEditingUser] = useState(null);
-  const [uForm, setUForm] = useState({ email: "", password: "", name: "", role: "cashier", industry_roles: {} });
+  const [uForm, setUForm] = useState({ email: "", password: "", name: "", role: "cashier", module_permissions: [], use_role_defaults: true });
   const [bForm, setBForm] = useState({ name: "", address: "", phone: "", gstin: "", state: "Karnataka" });
 
   const load = async () => {
-    const [b, br, u, a] = await Promise.all([
+    const [b, br, u, a, cat] = await Promise.all([
       api.get("/business"), api.get("/branches"), api.get("/users"), api.get("/audit-logs").catch(() => ({ data: [] })),
+      api.get("/permissions/catalog").catch(() => ({ data: { modules: {} } })),
     ]);
     setBiz(b.data || {}); setBranches(br.data); setUsers(u.data); setAudit(a.data);
+    setCatalog(cat.data || { modules: {} });
   };
   useEffect(() => { load(); }, []);
 
@@ -46,19 +64,15 @@ export default function Settings() {
     catch (e) { toast.error(formatApiError(e)); }
   };
   const saveUser = async () => {
-    try { await api.post("/users", uForm); toast.success("User added"); setOpenU(false); setUForm({ email: "", password: "", name: "", role: "cashier", industry_roles: {} }); load(); }
-    catch (e) { toast.error(formatApiError(e)); }
-  };
-  const openIndustryRoles = (u) => {
-    setEditingUser({ ...u, industry_roles: u.industry_roles || {} });
-    setOpenRoles(true);
-  };
-  const saveIndustryRoles = async () => {
     try {
-      await api.put(`/users/${editingUser.id}`, { industry_roles: editingUser.industry_roles || {} });
-      toast.success("Industry sub-roles updated");
-      setOpenRoles(false);
-      setEditingUser(null);
+      const payload = {
+        email: uForm.email, password: uForm.password, name: uForm.name, role: uForm.role,
+        module_permissions: uForm.use_role_defaults ? null : uForm.module_permissions,
+      };
+      await api.post("/users", payload);
+      toast.success("User added");
+      setOpenU(false);
+      setUForm({ email: "", password: "", name: "", role: "cashier", module_permissions: [], use_role_defaults: true });
       load();
     } catch (e) { toast.error(formatApiError(e)); }
   };
@@ -170,21 +184,84 @@ export default function Settings() {
                     <Select value={uForm.role} onValueChange={(v) => setUForm({ ...uForm, role: v })}>
                       <SelectTrigger className="rounded-sm mt-1"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {["owner", "manager", "cashier", "accountant", "doctor", "pharmacist"].map((r) => <SelectItem key={r} value={r} className="capitalize">{r}</SelectItem>)}
+                        {roleOptions.map((r) => <SelectItem key={r} value={r} className="capitalize">{SUBROLE_LABEL[r] || r}</SelectItem>)}
                       </SelectContent>
                     </Select>
-                    <div className="text-[11px] text-muted-foreground mt-1">Base role governs backend permissions (owner has full access).</div>
+                    <div className="text-[11px] text-muted-foreground mt-1">Roles are filtered to your enabled industries.</div>
                   </div>
+
+                  {/* Per-user Tenant Module Permissions */}
                   <div className="pt-3 border-t border-border">
                     <div className="flex items-center gap-2 mb-2">
                       <ShieldCheck className="w-4 h-4 text-primary" />
-                      <div className="text-sm font-semibold">Industry-Specific Sub-roles</div>
+                      <div className="text-sm font-semibold">Tenant Module Access</div>
                     </div>
-                    <div className="text-[11px] text-muted-foreground mb-3">Assign a sub-role per industry mode. Menu items and pages are filtered based on the sub-role of the currently active industry.</div>
-                    <IndustryRolesEditor
-                      value={uForm.industry_roles}
-                      onChange={(next) => setUForm({ ...uForm, industry_roles: next })}
-                    />
+                    <label className="flex items-center gap-2 mb-3 cursor-pointer">
+                      <Checkbox
+                        checked={uForm.use_role_defaults}
+                        onCheckedChange={(v) => setUForm({ ...uForm, use_role_defaults: !!v })}
+                        data-testid="use-role-defaults"
+                      />
+                      <span className="text-xs">
+                        Use default permissions for <b className="capitalize">{SUBROLE_LABEL[uForm.role] || uForm.role}</b>
+                        {roleDefaults[uForm.role]?.length > 0 && (
+                          <span className="text-muted-foreground"> ({roleDefaults[uForm.role].length} modules)</span>
+                        )}
+                      </span>
+                    </label>
+                    {!uForm.use_role_defaults && (
+                      <div className="rounded-sm border border-border p-3 space-y-1 max-h-[280px] overflow-y-auto">
+                        <div className="text-[10px] uppercase tracking-widest text-primary font-semibold mb-2">
+                          Pick modules this user can access
+                        </div>
+                        {enabledModules.length === 0 ? (
+                          <div className="text-xs text-muted-foreground">No enabled modules — turn some on in Layer 1 first.</div>
+                        ) : (
+                          <div className="grid grid-cols-2 gap-y-1.5 gap-x-3">
+                            {enabledModules.map((mk) => {
+                              const meta = catalog.modules?.[mk];
+                              if (!meta) return null;
+                              const checked = uForm.module_permissions.includes(mk);
+                              return (
+                                <label key={mk} className="flex items-center gap-2 text-xs cursor-pointer hover:bg-secondary/30 rounded-sm px-1.5 py-1">
+                                  <Checkbox
+                                    checked={checked}
+                                    onCheckedChange={(v) => {
+                                      const s = new Set(uForm.module_permissions);
+                                      if (v) s.add(mk); else s.delete(mk);
+                                      setUForm({ ...uForm, module_permissions: Array.from(s) });
+                                    }}
+                                    data-testid={`user-perm-${mk}`}
+                                  />
+                                  <span>{meta.label}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
+                        <div className="pt-2 flex gap-2">
+                          <button type="button" className="text-[10px] uppercase tracking-widest text-primary hover:underline"
+                            onClick={() => setUForm({ ...uForm, module_permissions: [...enabledModules] })}
+                            data-testid="perm-select-all">
+                            Select all
+                          </button>
+                          <span className="text-muted-foreground">·</span>
+                          <button type="button" className="text-[10px] uppercase tracking-widest text-muted-foreground hover:text-primary"
+                            onClick={() => setUForm({ ...uForm, module_permissions: [] })}>
+                            Clear
+                          </button>
+                          <span className="text-muted-foreground">·</span>
+                          <button type="button" className="text-[10px] uppercase tracking-widest text-muted-foreground hover:text-primary"
+                            onClick={() => {
+                              const roleMods = (roleDefaults[uForm.role] || []).filter((m) => enabledModules.includes(m));
+                              setUForm({ ...uForm, module_permissions: roleMods });
+                            }}
+                            data-testid="perm-prefill-role">
+                            Prefill from role defaults
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
                 <DialogFooter><Button className="rounded-sm" onClick={saveUser} data-testid="save-user">Save</Button></DialogFooter>
@@ -195,38 +272,25 @@ export default function Settings() {
             <Table>
               <TableHeader><TableRow>
                 <TableHead>Name</TableHead><TableHead>Email</TableHead><TableHead>Base Role</TableHead>
-                <TableHead>Industry Sub-roles</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead>Module Access</TableHead>
               </TableRow></TableHeader>
               <TableBody>
                 {users.map((u) => {
-                  const roles = u.industry_roles || {};
-                  const roleEntries = Object.entries(roles);
+                  const perUser = Array.isArray(u.module_permissions) && u.module_permissions.length > 0;
+                  const roleCount = (roleDefaults[u.role] || []).length;
                   return (
                     <TableRow key={u.id}>
                       <TableCell className="font-medium">{u.name}</TableCell>
                       <TableCell>{u.email}</TableCell>
-                      <TableCell><Badge variant="secondary" className="rounded-sm text-[10px] uppercase">{u.role}</Badge></TableCell>
+                      <TableCell><Badge variant="secondary" className="rounded-sm text-[10px] uppercase">{SUBROLE_LABEL[u.role] || u.role}</Badge></TableCell>
                       <TableCell>
-                        {roleEntries.length === 0 ? (
-                          <span className="text-xs text-muted-foreground">All industries — no restrictions</span>
+                        {u.role === "owner" || u.role === "admin" ? (
+                          <Badge className="rounded-sm text-[10px] bg-emerald-500/20 text-emerald-700 border-emerald-500/30">FULL ACCESS</Badge>
+                        ) : perUser ? (
+                          <Badge variant="outline" className="rounded-sm text-[10px]">CUSTOM · {u.module_permissions.length} modules</Badge>
                         ) : (
-                          <div className="flex flex-wrap gap-1">
-                            {roleEntries.map(([ind, r]) => (
-                              <Badge key={ind} variant="outline" className="rounded-sm text-[10px]">
-                                <span className="uppercase text-muted-foreground mr-1">{ind.slice(0, 3)}:</span>
-                                {SUBROLE_LABEL[r] || r}
-                              </Badge>
-                            ))}
-                          </div>
+                          <span className="text-xs text-muted-foreground">Role default ({roleCount})</span>
                         )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="outline" size="sm" className="rounded-sm h-8 gap-1.5"
-                          data-testid={`manage-roles-${u.id}`}
-                          onClick={() => openIndustryRoles(u)}>
-                          <ShieldCheck className="w-3.5 h-3.5" /> Manage
-                        </Button>
                       </TableCell>
                     </TableRow>
                   );
@@ -234,29 +298,6 @@ export default function Settings() {
               </TableBody>
             </Table>
           </Card>
-
-          <Dialog open={openRoles} onOpenChange={setOpenRoles}>
-            <DialogContent className="max-w-lg">
-              <DialogHeader>
-                <DialogTitle>Industry Sub-roles — {editingUser?.name}</DialogTitle>
-              </DialogHeader>
-              {editingUser && (
-                <div className="max-h-[70vh] overflow-y-auto pr-1">
-                  <div className="text-[11px] text-muted-foreground mb-3">
-                    Assign a sub-role per industry mode. Leave a mode as <b>Unrestricted</b> to give access to all pages under that mode. Owner accounts always bypass restrictions.
-                  </div>
-                  <IndustryRolesEditor
-                    value={editingUser.industry_roles}
-                    onChange={(next) => setEditingUser({ ...editingUser, industry_roles: next })}
-                  />
-                </div>
-              )}
-              <DialogFooter>
-                <Button variant="outline" className="rounded-sm" onClick={() => setOpenRoles(false)}>Cancel</Button>
-                <Button className="rounded-sm" onClick={saveIndustryRoles} data-testid="save-industry-roles">Save Sub-roles</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
         </TabsContent>
 
         <TabsContent value="audit" className="mt-4">
@@ -286,45 +327,6 @@ export default function Settings() {
           <AggregatorIntegrations biz={biz} />
         </TabsContent>
       </Tabs>
-    </div>
-  );
-}
-
-function IndustryRolesEditor({ value, onChange }) {
-  const roles = value || {};
-  const industryLabels = {
-    generic: "Generic",
-    retail: "Retail",
-    restaurant: "Restaurant",
-    hospital: "Hospital",
-    pharmacy: "Pharmacy",
-    service: "Service",
-  };
-  const setFor = (ind, sub) => {
-    const next = { ...roles };
-    if (!sub || sub === "__unrestricted") delete next[ind];
-    else next[ind] = sub;
-    onChange(next);
-  };
-  return (
-    <div className="grid grid-cols-1 gap-2">
-      {Object.keys(INDUSTRY_SUBROLES).map((ind) => (
-        <div key={ind} className="grid grid-cols-[130px_1fr] gap-3 items-center">
-          <div className="text-sm font-medium">{industryLabels[ind] || ind}</div>
-          <Select
-            value={roles[ind] || "__unrestricted"}
-            onValueChange={(v) => setFor(ind, v)}
-          >
-            <SelectTrigger className="rounded-sm h-9" data-testid={`subrole-${ind}`}><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__unrestricted">Unrestricted (all pages)</SelectItem>
-              {INDUSTRY_SUBROLES[ind].map((r) => (
-                <SelectItem key={r} value={r}>{SUBROLE_LABEL[r] || r}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      ))}
     </div>
   );
 }

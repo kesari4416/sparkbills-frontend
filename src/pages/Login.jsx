@@ -8,15 +8,16 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import {
   ArrowRight, ShieldCheck, Sparkles,
-  Store, Utensils, HeartPulse, Pill, Wrench, Mail, Lock, Eye, EyeOff,
+  Store, Utensils, Scissors, Pill, Wrench, Tv, Mail, Lock, Eye, EyeOff,
 } from "lucide-react";
 
 const industries = [
   { icon: Store, label: "Retail" },
   { icon: Utensils, label: "Restaurant" },
-  { icon: HeartPulse, label: "Hospital" },
+  { icon: Scissors, label: "Textile" },
   { icon: Pill, label: "Pharmacy" },
-  { icon: Wrench, label: "Services" },
+  { icon: Wrench, label: "Hardware" },
+  { icon: Tv, label: "Electronics" },
 ];
 
 const stats = [
@@ -34,16 +35,20 @@ export default function Login() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (user) navigate("/app", { replace: true });
+    if (user) {
+      if (user.platform_role === "super_admin") navigate("/platform", { replace: true });
+      else navigate("/app", { replace: true });
+    }
   }, [user, navigate]);
 
   const onSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     try {
-      await login(email, password);
+      const data = await login(email, password);
       toast.success("Welcome back!");
-      navigate("/app");
+      if (data?.platform_role === "super_admin") navigate("/platform");
+      else navigate("/app");
     } catch (err) {
       toast.error(formatApiError(err));
     } finally {
@@ -175,7 +180,7 @@ export default function Login() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 1.1 }}
             >
-              One suite for retail, restaurants, hospitals, pharmacies and services.
+              One suite for retail, restaurants, textiles, pharmacies, hardware and electronics.
               GST-compliant invoices, KOTs, e-Way Bill, IRN, P&amp;L, cashier shifts &mdash; all in a single dashboard.
             </motion.p>
 
