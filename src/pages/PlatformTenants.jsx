@@ -27,6 +27,7 @@ const INDUSTRY_LABEL = {
   textile: "Textile & Fashion",
   pharmacy: "Pharmacy",
   hardware: "Hardware Shop",
+  electronics: "Electronics & Home Appliances",
 };
 
 const EMPTY_FORM = {
