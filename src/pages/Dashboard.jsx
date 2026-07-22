@@ -31,10 +31,24 @@ const STATUS_STYLE = {
   cancelled: "chip-danger",
 };
 
+// Industry key → dashboard "Business Modules" card. Only industries the client
+// has been provisioned for (businessPerms.allowed_industries) render here — this
+// prevents leakage of un-purchased industry features on the client dashboard.
+const INDUSTRY_MODULE_CARDS = {
+  restaurant:  { label: "Restaurant POS",  icon: UtensilsCrossed, to: "/app/restaurant" },
+  cafe:        { label: "Tea & Snacks POS",icon: UtensilsCrossed, to: "/app/restaurant" },
+  retail:      { label: "Retail POS",      icon: Store,           to: "/app/pos" },
+  fruits_veg:  { label: "F&V POS",         icon: Store,           to: "/app/pos" },
+  textile:     { label: "Textile POS",     icon: Scissors,        to: "/app/pos" },
+  pharmacy:    { label: "Pharmacy",        icon: Pill,            to: "/app/pharmacy" },
+  hardware:    { label: "Hardware POS",    icon: Warehouse,       to: "/app/pos" },
+  electronics: { label: "Electronics",     icon: Package,         to: "/app/electronics" },
+};
+
 export default function Dashboard() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const { user } = useAuth();
+  const { user, businessPerms } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -81,14 +95,23 @@ export default function Dashboard() {
     { label: "Expense Entry", icon: CreditCard, color: "bg-rose-50 text-rose-600 border-rose-100", to: "/app/purchases" },
   ];
 
-  const modules = [
-    { label: "Restaurant POS", icon: UtensilsCrossed, active: true, to: "/app/restaurant" },
-    { label: "Alterations & Tailor", icon: Scissors, active: false, to: "/app/alterations" },
-    { label: "Pharmacy", icon: Pill, active: false, to: "/app/pharmacy" },
-    { label: "Retail POS", icon: Store, active: false, to: "/app/pos" },
-    { label: "Inventory", icon: Warehouse, active: true, to: "/app/items" },
-    { label: "Reports", icon: BarChart3, active: true, to: "/app/reports" },
-  ];
+  // Build the "Business Modules" bar strictly from the client's provisioned
+  // industries (Layer 1 lock). Anything the Super Admin has not enabled for
+  // this client must NOT surface here — even as an inactive teaser.
+  const allowedInds = (businessPerms?.allowed_industries || []).filter(Boolean);
+  const enabledModules = businessPerms?.modules || {};
+  const industryCards = allowedInds
+    .map((k) => INDUSTRY_MODULE_CARDS[k] ? { ...INDUSTRY_MODULE_CARDS[k], active: true } : null)
+    .filter(Boolean);
+  const commonCards = [
+    { label: "Inventory", icon: Warehouse, to: "/app/items", moduleKey: "items" },
+    { label: "Reports",   icon: BarChart3, to: "/app/reports", moduleKey: "reports" },
+    { label: "Alterations & Tailor", icon: Scissors, to: "/app/alterations", moduleKey: "alterations", industries: ["textile"] },
+  ]
+    .filter((c) => !c.industries || c.industries.some((i) => allowedInds.includes(i)))
+    .filter((c) => enabledModules[c.moduleKey] !== false)
+    .map((c) => ({ ...c, active: true }));
+  const modules = [...industryCards, ...commonCards];
 
   const now = new Date();
   const dateLabel = now.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });

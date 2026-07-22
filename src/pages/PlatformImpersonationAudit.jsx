@@ -29,7 +29,7 @@ export default function PlatformImpersonationAudit() {
         <div>
           <div className="text-[10px] uppercase tracking-[0.3em] text-blue-400">Platform Control</div>
           <h1 className="font-heading text-3xl font-bold tracking-tight mt-1">Impersonation Audit</h1>
-          <p className="text-sm text-blue-200/60 mt-1">Every start/stop of a &quot;Login as tenant&quot; session — for compliance &amp; incident response.</p>
+          <p className="text-sm text-blue-200/60 mt-1">Every start/stop of a &quot;Login as client&quot; session — for compliance &amp; incident response.</p>
         </div>
       </div>
 
@@ -49,7 +49,7 @@ export default function PlatformImpersonationAudit() {
                 <TableHead className="text-blue-300/70">Action</TableHead>
                 <TableHead className="text-blue-300/70">Super Admin</TableHead>
                 <TableHead className="text-blue-300/70">Impersonated</TableHead>
-                <TableHead className="text-blue-300/70">Tenant</TableHead>
+                <TableHead className="text-blue-300/70">Client</TableHead>
                 <TableHead className="text-blue-300/70">IP</TableHead>
               </TableRow>
             </TableHeader>

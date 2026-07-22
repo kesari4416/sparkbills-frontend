@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, fmtINR, API } from "@/lib/apiClient";
+import { api, fmtINR, API, assetUrl } from "@/lib/apiClient";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Search, Plus, Minus, X, Barcode, Ruler, Package } from "lucide-react";
+import BarcodeScanBar from "@/components/BarcodeScanBar";
 
 export default function POS() {
   const { industry } = useAuth();
@@ -146,10 +147,10 @@ export default function POS() {
             <Input
               data-testid="pos-search"
               autoFocus
-              placeholder={industry === "textile" ? "Search product / brand / barcode…" : "Search or scan barcode…"}
+              placeholder={industry === "textile" ? "Search product / brand…" : "Search product name or SKU…"}
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && q) { if (/^\d{6,}$/.test(q)) barcodeScan(q); else if (filtered[0]) onItemClick(filtered[0]); } }}
+              onKeyDown={(e) => { if (e.key === "Enter" && q && filtered[0]) onItemClick(filtered[0]); }}
               className="pl-9 rounded-sm h-11"
             />
           </div>
@@ -168,6 +169,13 @@ export default function POS() {
             </SelectContent>
           </Select>
         </div>
+        <div className="px-4 pb-3">
+          <BarcodeScanBar
+            items={items}
+            onScan={(it) => onItemClick(it)}
+            placeholder="Scan a product barcode to add to cart…"
+          />
+        </div>
         <div className="flex-1 overflow-y-auto scrollbar-thin p-4 grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 auto-rows-min">
           {filtered.map((it) => {
             const hasSizes = industry === "textile" && Array.isArray(it.size_stocks) && it.size_stocks.some((s) => (s.qty || 0) > 0);
@@ -176,24 +184,42 @@ export default function POS() {
                 key={it.id}
                 data-testid={`pos-item-${it.id}`}
                 onClick={() => onItemClick(it)}
-                className="p-3 border border-border rounded-sm text-left hover:border-primary hover:bg-accent/50 transition-colors"
+                className="border border-border rounded-sm text-left hover:border-primary hover:bg-accent/50 transition-colors overflow-hidden group"
               >
-                {industry === "textile" && it.brand && (
-                  <div className="text-[9px] uppercase tracking-widest text-primary font-bold">{it.brand}</div>
-                )}
-                <div className="text-sm font-semibold truncate">{it.name}</div>
-                <div className="text-[10px] uppercase tracking-widest text-muted-foreground mt-1">
-                  {industry === "textile" && it.color ? `${it.category || it.item_type} · ${it.color}` : (it.category || it.item_type)}
-                </div>
-                <div className="mt-3 flex items-baseline justify-between">
-                  <span className="tabular font-heading text-lg font-bold text-primary">{fmtINR(it.sale_price)}</span>
-                  {hasSizes ? (
-                    <span className="text-[10px] text-emerald-700 flex items-center gap-1 font-semibold">
-                      <Ruler className="w-3 h-3" /> {it.size_stocks.filter((s) => (s.qty || 0) > 0).length} sizes
-                    </span>
+                <div className="relative w-full aspect-square bg-secondary/40 flex items-center justify-center overflow-hidden">
+                  {it.image_url ? (
+                    <img
+                      src={assetUrl(it.image_url)}
+                      alt={it.name}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                      loading="lazy"
+                      data-testid={`pos-item-image-${it.id}`}
+                    />
                   ) : (
-                    <span className="text-[10px] text-muted-foreground">Stk {it.stock}</span>
+                    <Package className="w-8 h-8 text-muted-foreground/60" strokeWidth={1.5} />
                   )}
+                  {industry === "textile" && it.brand && (
+                    <div className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded-sm bg-primary text-primary-foreground text-[9px] uppercase tracking-widest font-bold shadow">
+                      {it.brand}
+                    </div>
+                  )}
+                  {hasSizes && (
+                    <div className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded-sm bg-emerald-600 text-white text-[9px] font-semibold flex items-center gap-1 shadow">
+                      <Ruler className="w-2.5 h-2.5" /> {it.size_stocks.filter((s) => (s.qty || 0) > 0).length}
+                    </div>
+                  )}
+                </div>
+                <div className="p-2.5">
+                  <div className="text-sm font-semibold truncate">{it.name}</div>
+                  <div className="text-[10px] uppercase tracking-widest text-muted-foreground mt-0.5 truncate">
+                    {industry === "textile" && it.color ? `${it.category || it.item_type} · ${it.color}` : (it.category || it.item_type)}
+                  </div>
+                  <div className="mt-2 flex items-baseline justify-between">
+                    <span className="tabular font-heading text-base font-bold text-primary">{fmtINR(it.sale_price)}</span>
+                    {!hasSizes && (
+                      <span className="text-[10px] text-muted-foreground">Stk {it.stock}</span>
+                    )}
+                  </div>
                 </div>
               </button>
             );

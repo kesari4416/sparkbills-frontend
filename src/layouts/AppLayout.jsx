@@ -157,7 +157,7 @@ export default function AppLayout() {
               <div className="flex items-center gap-2 mb-1.5">
                 <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
                 <div className="text-[10px] uppercase tracking-widest text-[hsl(var(--sidebar-muted))] font-semibold">
-                  {user?.role === "admin" ? "Tenant Admin" : "Active Sub-role"}
+                  {user?.role === "admin" ? "Client Admin" : "Active Sub-role"}
                 </div>
               </div>
               <div className="text-sm font-bold text-white" data-testid="sidebar-subrole">

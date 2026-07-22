@@ -194,7 +194,7 @@ export default function Settings() {
                   <div className="pt-3 border-t border-border">
                     <div className="flex items-center gap-2 mb-2">
                       <ShieldCheck className="w-4 h-4 text-primary" />
-                      <div className="text-sm font-semibold">Tenant Module Access</div>
+                      <div className="text-sm font-semibold">Client Module Access</div>
                     </div>
                     <label className="flex items-center gap-2 mb-3 cursor-pointer">
                       <Checkbox

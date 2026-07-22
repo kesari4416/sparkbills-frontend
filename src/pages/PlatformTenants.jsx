@@ -100,7 +100,7 @@ export default function PlatformTenants() {
     if (!window.confirm(`Suspend "${t.name}"? All logins will be blocked.`)) return;
     try {
       await api.patch(`/platform/tenants/${t.id}/suspend`);
-      toast.success("Tenant suspended");
+      toast.success("Client suspended");
       load();
     } catch (e) { toast.error(formatApiError(e)); }
   };
@@ -108,17 +108,17 @@ export default function PlatformTenants() {
   const activate = async (t) => {
     try {
       await api.patch(`/platform/tenants/${t.id}/activate`);
-      toast.success("Tenant activated");
+      toast.success("Client activated");
       load();
     } catch (e) { toast.error(formatApiError(e)); }
   };
 
   const del = async (t) => {
-    if (!window.confirm(`DELETE tenant "${t.name}" and ALL its data? This cannot be undone.`)) return;
+    if (!window.confirm(`DELETE client "${t.name}" and ALL its data? This cannot be undone.`)) return;
     if (!window.confirm(`Type-guard: confirm delete of ${t.name}?`)) return;
     try {
       await api.delete(`/platform/tenants/${t.id}`);
-      toast.success("Tenant deleted");
+      toast.success("Client deleted");
       load();
     } catch (e) { toast.error(formatApiError(e)); }
   };
@@ -139,7 +139,7 @@ export default function PlatformTenants() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <div className="text-[10px] uppercase tracking-[0.3em] text-blue-400">Platform Control</div>
-          <h1 className="font-heading text-3xl font-bold tracking-tight mt-1">Tenants</h1>
+          <h1 className="font-heading text-3xl font-bold tracking-tight mt-1">Clients</h1>
           <p className="text-sm text-blue-200/60 mt-1">All Sparkbills businesses on this deployment.</p>
         </div>
         <div className="flex items-center gap-2">
@@ -156,12 +156,12 @@ export default function PlatformTenants() {
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
               <Button className="rounded-md gap-2 bg-blue-600 hover:bg-blue-500" data-testid="new-tenant-btn">
-                <Plus className="w-4 h-4" /> New Tenant
+                <Plus className="w-4 h-4" /> New Client
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-xl">
               <DialogHeader>
-                <DialogTitle>Provision new tenant</DialogTitle>
+                <DialogTitle>Provision new client</DialogTitle>
               </DialogHeader>
               <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-1">
                 <div className="grid grid-cols-2 gap-3">
@@ -180,7 +180,7 @@ export default function PlatformTenants() {
                 </div>
                 <div className="pt-3 border-t">
                   <div className="text-[10px] uppercase tracking-widest text-primary font-semibold mb-2">
-                    Enabled Industries — lock this tenant to what they use
+                    Enabled Industries — lock this client to what they use
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     {Object.entries(INDUSTRY_LABEL).map(([k, label]) => {
@@ -204,7 +204,7 @@ export default function PlatformTenants() {
               <DialogFooter>
                 <Button variant="outline" className="rounded-sm" onClick={() => setOpen(false)}>Cancel</Button>
                 <Button className="rounded-sm" onClick={create} disabled={saving || !form.business_name || !form.owner_email || !form.owner_password || !form.owner_name} data-testid="save-tenant">
-                  {saving ? "Creating…" : "Create Tenant"}
+                  {saving ? "Creating…" : "Create Client"}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -214,11 +214,11 @@ export default function PlatformTenants() {
 
       <Card className="rounded-sm overflow-hidden bg-white/[0.03] border-white/10 text-white">
         {loading ? (
-          <div className="p-8 text-center text-blue-200/60">Loading tenants…</div>
+          <div className="p-8 text-center text-blue-200/60">Loading clients…</div>
         ) : filtered.length === 0 ? (
           <div className="p-12 text-center text-blue-200/50">
             <Building2 className="w-10 h-10 mx-auto opacity-40 mb-3" />
-            {q ? `No tenants match "${q}".` : "No tenants yet. Click New Tenant to provision one."}
+            {q ? `No clients match "${q}".` : "No clients yet. Click New Client to provision one."}
           </div>
         ) : (
           <Table>

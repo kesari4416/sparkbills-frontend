@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 
 const NAV = [
   { to: "/platform", label: "Platform Overview", icon: LayoutDashboard, end: true },
-  { to: "/platform/tenants", label: "Tenants", icon: Building2 },
+  { to: "/platform/tenants", label: "Clients", icon: Building2 },
   { to: "/platform/audit", label: "Impersonation Log", icon: History },
 ];
 
@@ -69,7 +69,7 @@ export default function PlatformLayout() {
             </div>
             <div className="text-sm font-bold" data-testid="platform-role-badge">Super Admin</div>
             <div className="text-[11px] text-blue-300/60 mt-0.5">
-              Cross-tenant access
+              Cross-client access
             </div>
           </div>
         </div>
@@ -85,7 +85,7 @@ export default function PlatformLayout() {
             onClick={() => navigate("/app")}
             data-testid="jump-to-app-btn"
           >
-            <ArrowLeft className="w-4 h-4" /> My Tenant App
+            <ArrowLeft className="w-4 h-4" /> My Client App
           </Button>
 
           <div className="flex-1" />

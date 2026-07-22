@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/table";
 import { toast } from "sonner";
 import { Trash2, Plus, Search, Save, FileDown, ShieldCheck } from "lucide-react";
+import BarcodeScanBar from "@/components/BarcodeScanBar";
 
 const DOC_TYPES = [
   { id: "invoice", label: "Tax Invoice" },
@@ -204,12 +205,17 @@ export default function NewInvoice() {
       </Card>
 
       {/* Item picker */}
-      <Card className="p-4 rounded-sm">
+      <Card className="p-4 rounded-sm space-y-3">
+        <BarcodeScanBar
+          items={items}
+          onScan={(it) => addLine(it)}
+          placeholder="Scan a product barcode to add a line…"
+        />
         <div className="relative">
           <Search className="w-4 h-4 absolute left-3 top-3 text-muted-foreground" />
           <Input
             data-testid="item-picker"
-            placeholder="Search & add item — name, SKU, or scan barcode"
+            placeholder="Or search by name / SKU"
             value={itemSearch}
             onChange={(e) => setItemSearch(e.target.value)}
             onKeyDown={(e) => {

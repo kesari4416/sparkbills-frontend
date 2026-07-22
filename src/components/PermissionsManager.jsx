@@ -157,7 +157,7 @@ export default function PermissionsManager() {
       <Tabs defaultValue={canEditModules ? "modules" : "roles"}>
         <TabsList className="rounded-sm">
           <TabsTrigger value="modules" data-testid="perm-tab-modules" disabled={!canEditModules}>
-            <Layers className="w-3.5 h-3.5 mr-2" />Layer 1: Tenant Modules
+            <Layers className="w-3.5 h-3.5 mr-2" />Layer 1: Client Modules
             {!canEditModules && <Lock className="w-3 h-3 ml-1.5 text-muted-foreground" />}
           </TabsTrigger>
           <TabsTrigger value="roles" data-testid="perm-tab-roles">
@@ -211,7 +211,7 @@ export default function PermissionsManager() {
               <div>
                 <div className="font-heading text-lg font-bold">Role → Module matrix</div>
                 <div className="text-xs text-muted-foreground">
-                  For enabled modules only, tick which roles can access each. Greyed rows are disabled at the tenant level.
+                  For enabled modules only, tick which roles can access each. Greyed rows are disabled at the client level.
                 </div>
               </div>
               <Button className="rounded-sm gap-2" onClick={saveRoles} disabled={saving || !canEditRoles} data-testid="save-role-perms">

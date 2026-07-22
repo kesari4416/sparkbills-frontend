@@ -5,11 +5,33 @@ const AuthContext = createContext(null);
 
 const DEFAULT_INDUSTRY = "retail";
 
+// Ensure axios always ships the current industry as a header. The request
+// interceptor in apiClient reads localStorage on every call, but React
+// hot-reload can hold a stale reference to the axios instance, so we also
+// pin the header on the instance's defaults whenever industry changes.
+function setAxiosIndustryHeader(v) {
+  if (v) {
+    api.defaults.headers.common["X-Industry"] = v;
+  } else {
+    delete api.defaults.headers.common["X-Industry"];
+  }
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null); // null=checking, false=guest, obj=user
-  const [industry, setIndustry] = useState(
+  const [industry, _setIndustry] = useState(
     localStorage.getItem("industry") || DEFAULT_INDUSTRY,
   );
+  // At boot, pin the header immediately so the very first /permissions call
+  // is industry-scoped.
+  if (typeof window !== "undefined") {
+    setAxiosIndustryHeader(localStorage.getItem("industry") || DEFAULT_INDUSTRY);
+  }
+  const setIndustry = (v) => {
+    _setIndustry(v);
+    if (v) localStorage.setItem("industry", v);
+    setAxiosIndustryHeader(v);
+  };
   const [businessPerms, setBusinessPerms] = useState({
     modules: {},
     role_permissions: {},
@@ -32,7 +54,6 @@ export function AuthProvider({ children }) {
         if (!cur || !allowed.includes(cur)) {
           const next = allowed[0];
           setIndustry(next);
-          localStorage.setItem("industry", next);
         }
       }
     } catch {
@@ -95,7 +116,6 @@ export function AuthProvider({ children }) {
 
   const changeIndustry = (i) => {
     setIndustry(i);
-    localStorage.setItem("industry", i);
   };
 
   return (

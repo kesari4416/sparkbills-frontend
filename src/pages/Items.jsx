@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { api, formatApiError, API } from "@/lib/apiClient";
+import { useEffect, useRef, useState } from "react";
+import { api, formatApiError, API, assetUrl } from "@/lib/apiClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,15 +15,42 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Search, Package, Pencil, Trash2, Barcode, Coffee, Apple, ShoppingBag, Wrench, Pill, Tv } from "lucide-react";
+import { Plus, Search, Package, Pencil, Trash2, Barcode, Coffee, Apple, ShoppingBag, Wrench, Pill, Tv, ScanLine, ImagePlus, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
-const ITEM_TYPES = [
+const ALL_ITEM_TYPES = [
   { id: "product", label: "Product" },
   { id: "medicine", label: "Medicine" },
   { id: "menu", label: "Menu Item" },
   { id: "service", label: "Service" },
 ];
+
+// Only surface item-types that actually make sense for the active industry.
+// A tea & snacks shop should never see "Medicine"; a pharmacy should never
+// see "Menu Item". "Product" and "Service" are universal.
+const INDUSTRY_ITEM_TYPES = {
+  cafe:        ["menu", "product", "service"],
+  restaurant:  ["menu", "product", "service"],
+  pharmacy:    ["medicine", "product", "service"],
+  retail:      ["product", "service"],
+  fruits_veg:  ["product", "service"],
+  textile:     ["product", "service"],
+  hardware:    ["product", "service"],
+  electronics: ["product", "service"],
+};
+
+// Dialog description + default item_type per industry — keeps the "New Item"
+// screen relevant to what the shopkeeper actually sells.
+const INDUSTRY_DIALOG_META = {
+  cafe:        { desc: "Add a tea, snack or menu item with pricing, GST and add-ons.", defaultType: "menu" },
+  restaurant:  { desc: "Add a menu item with pricing, GST, variants and add-ons.", defaultType: "menu" },
+  pharmacy:    { desc: "Add a medicine or product with batch, HSN and GST details.", defaultType: "medicine" },
+  retail:      { desc: "Add a retail product with unit, HSN, GST and stock details.", defaultType: "product" },
+  fruits_veg:  { desc: "Add a produce item with unit (KG / PCS / BUNDLE), GST and price.", defaultType: "product" },
+  textile:     { desc: "Add a textile product — one entry manages size-wise stock automatically.", defaultType: "product" },
+  hardware:    { desc: "Add a hardware product with unit, HSN and GST details.", defaultType: "product" },
+  electronics: { desc: "Add an appliance with brand, model, warranty and pricing.", defaultType: "product" },
+};
 
 const emptyItem = {
   name: "", item_type: "product", sku: "", barcode: "", hsn_sac: "",
@@ -33,6 +60,7 @@ const emptyItem = {
   variants: [], addons: [], batches: [],
   brand: "", department: "", color: "", size_stocks: [],
   model_number: "", warranty_months: 0, energy_rating: "", imei_required: false,
+  image_url: "",
 };
 
 const DEPARTMENTS = ["Men", "Women", "Kids", "Home", "Unisex"];
@@ -64,6 +92,45 @@ export default function Items() {
   const [labelSize, setLabelSize] = useState("38x25");
   const [labelPrinting, setLabelPrinting] = useState(false);
   const [seeding, setSeeding] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [uploadingImg, setUploadingImg] = useState(false);
+  const barcodeRef = useRef(null);
+
+  // Upload a chosen file to the backend and stamp the returned URL onto the
+  // form so it saves along with the rest of the item fields.
+  const uploadImage = async (file) => {
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("Image must be under 2 MB");
+      return;
+    }
+    setUploadingImg(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const { data } = await api.post("/items/upload-image", fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      setForm((f) => ({ ...f, image_url: data.url }));
+      toast.success("Image uploaded");
+    } catch (e) { toast.error(formatApiError(e)); }
+    finally { setUploadingImg(false); }
+  };
+
+  // Focus the barcode input for a hardware scanner (USB / Bluetooth scanners
+  // emulate a keyboard — they type the code + Enter into whatever field has focus).
+  const startScan = () => {
+    setScanning(true);
+    setTimeout(() => {
+      const el = barcodeRef.current;
+      if (el) { el.focus(); el.select(); }
+    }, 60);
+  };
+  // Auto-exit "scan mode" when the barcode input loses focus or after
+  // the scanner completes (which happens on Enter → keyDown handler below).
+  const handleBarcodeKeyDown = (e) => {
+    if (e.key === "Enter") { e.preventDefault(); setScanning(false); }
+  };
 
   const seedTeaShop = async () => {
     if (!confirm("This will add ~95 sample tea & snacks items to your catalogue. Existing items are kept intact. Continue?")) return;
@@ -203,7 +270,17 @@ export default function Items() {
     return () => clearTimeout(t);
   }, [search]);
 
-  const openNew = () => { setEditing(null); setForm(emptyItem); setOpen(true); };
+  // Item-types filtered to the caller's active industry (e.g. no "Medicine"
+  // on a Tea & Snacks workspace). Falls back to the universal list.
+  const industryMeta = INDUSTRY_DIALOG_META[industry] || { desc: "Set up a product or service with pricing, tax and stock.", defaultType: "product" };
+  const industryTypeIds = INDUSTRY_ITEM_TYPES[industry] || ALL_ITEM_TYPES.map((t) => t.id);
+  const ITEM_TYPES = ALL_ITEM_TYPES.filter((t) => industryTypeIds.includes(t.id));
+
+  const openNew = () => {
+    setEditing(null);
+    setForm({ ...emptyItem, item_type: industryMeta.defaultType });
+    setOpen(true);
+  };
   const openEdit = (i) => { setEditing(i); setForm({ ...emptyItem, ...i }); setOpen(true); };
 
   const save = async () => {
@@ -323,11 +400,14 @@ export default function Items() {
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader><DialogTitle>{editing ? "Edit Item" : "New Item"}</DialogTitle><DialogDescription>{industry === "textile" ? "Add a textile product — one entry manages size-wise stock automatically." : "Set up product / menu item / medicine with pricing, tax and add-ons."}</DialogDescription></DialogHeader>
+            <DialogHeader><DialogTitle>{editing ? "Edit Item" : "New Item"}</DialogTitle><DialogDescription>{industryMeta.desc}</DialogDescription></DialogHeader>
             {industry === "textile" ? (
-              <TextileItemForm form={form} setForm={setForm} />
+              <TextileItemForm form={form} setForm={setForm} uploadImage={uploadImage} uploadingImg={uploadingImg} />
             ) : (
             <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <ItemImagePicker imageUrl={form.image_url} onFile={uploadImage} onClear={() => setForm((f) => ({ ...f, image_url: "" }))} uploading={uploadingImg} />
+              </div>
               <div className="col-span-2">
                 <Label>Name</Label>
                 <Input data-testid="item-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="rounded-sm mt-1" />
@@ -351,7 +431,29 @@ export default function Items() {
               </div>
               <div>
                 <Label>Barcode</Label>
-                <Input value={form.barcode} onChange={(e) => setForm({ ...form, barcode: e.target.value })} className="rounded-sm mt-1" />
+                <div className="flex gap-2 mt-1">
+                  <Input
+                    ref={barcodeRef}
+                    value={form.barcode}
+                    onChange={(e) => setForm({ ...form, barcode: e.target.value })}
+                    onKeyDown={handleBarcodeKeyDown}
+                    onBlur={() => setScanning(false)}
+                    placeholder="Scan or type barcode"
+                    className={`rounded-sm font-mono text-xs transition-all ${scanning ? "ring-2 ring-emerald-500 border-emerald-500" : ""}`}
+                    data-testid="item-barcode"
+                  />
+                  <Button
+                    type="button"
+                    variant={scanning ? "default" : "outline"}
+                    size="sm"
+                    className={`rounded-sm shrink-0 gap-1.5 ${scanning ? "bg-emerald-600 hover:bg-emerald-700 text-white" : ""}`}
+                    onClick={() => startScan()}
+                    data-testid="scan-barcode-btn"
+                  >
+                    <ScanLine className="w-3.5 h-3.5" />
+                    {scanning ? "Scanning…" : "Scan"}
+                  </Button>
+                </div>
               </div>
               <div>
                 <Label>HSN / SAC</Label>
@@ -375,12 +477,25 @@ export default function Items() {
               </div>
               <div>
                 <Label>GST Rate (%)</Label>
-                <Select value={String(form.gst_rate)} onValueChange={(v) => setForm({ ...form, gst_rate: parseFloat(v) })}>
-                  <SelectTrigger className="rounded-sm mt-1"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {[0, 5, 12, 18, 28].map((r) => <SelectItem key={r} value={String(r)}>{r}%</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-2 mt-1">
+                  <Input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    value={form.gst_rate}
+                    onChange={(e) => setForm({ ...form, gst_rate: parseFloat(e.target.value) || 0 })}
+                    className="rounded-sm"
+                    data-testid="item-gst-rate"
+                    placeholder="Any % e.g. 12.5"
+                  />
+                  <Select value="" onValueChange={(v) => setForm({ ...form, gst_rate: parseFloat(v) })}>
+                    <SelectTrigger className="rounded-sm w-24 shrink-0" aria-label="Preset"><SelectValue placeholder="Preset" /></SelectTrigger>
+                    <SelectContent>
+                      {[0, 3, 5, 12, 18, 28].map((r) => <SelectItem key={r} value={String(r)}>{r}%</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <div>
                 <Label>Opening Stock</Label>
@@ -590,6 +705,7 @@ export default function Items() {
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               <TableHead className="w-10"></TableHead>
+              <TableHead className="text-[10px] uppercase tracking-widest w-16">Image</TableHead>
               <TableHead className="text-[10px] uppercase tracking-widest">Name</TableHead>
               {industry === "textile" ? (
                 <>
@@ -616,9 +732,23 @@ export default function Items() {
                     className="rounded-sm"
                     data-testid={`select-item-${i.id}`} />
                 </TableCell>
+                <TableCell>
+                  {i.image_url ? (
+                    <img
+                      src={assetUrl(i.image_url)}
+                      alt={i.name}
+                      className="w-10 h-10 rounded-sm object-cover border border-border bg-secondary/40"
+                      data-testid={`item-thumb-${i.id}`}
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded-sm border border-dashed border-border bg-secondary/40 flex items-center justify-center text-muted-foreground">
+                      <Package className="w-4 h-4" />
+                    </div>
+                  )}
+                </TableCell>
                 <TableCell className="font-medium">
                   <div className="flex items-center gap-2">
-                    <Package className="w-3 h-3 text-muted-foreground" />
                     {i.name}
                     {i.sku && <span className="text-xs text-muted-foreground">· {i.sku}</span>}
                   </div>
@@ -649,7 +779,7 @@ export default function Items() {
               </TableRow>
             ))}
             {items.length === 0 && (
-              <TableRow><TableCell colSpan={industry === "textile" ? 10 : 8} className="text-center text-muted-foreground py-16">No items yet — click <b>New Item</b> to add one.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={industry === "textile" ? 11 : 9} className="text-center text-muted-foreground py-16">No items yet — click <b>New Item</b> to add one.</TableCell></TableRow>
             )}
           </TableBody>
         </Table>
@@ -665,7 +795,67 @@ export default function Items() {
 const DEPARTMENTS_LIST = ["Men", "Women", "Kids", "Home", "Unisex"];
 const STANDARD_SIZES_LIST = ["XS", "S", "M", "L", "XL", "XXL", "XXXL"];
 
-function TextileItemForm({ form, setForm }) {
+// Reusable "pick / preview / clear" image widget used by both the generic and
+// textile forms. Keeps the upload state (loading, url) on the parent form so
+// the same save() call ships image_url alongside the other item fields.
+function ItemImagePicker({ imageUrl, onFile, onClear, uploading }) {
+  const inputRef = useRef(null);
+  const src = imageUrl ? assetUrl(imageUrl) : "";
+  return (
+    <div className="flex items-center gap-3">
+      <div className="relative w-20 h-20 rounded-sm border border-dashed border-border bg-secondary/40 overflow-hidden flex items-center justify-center shrink-0">
+        {src ? (
+          <img src={src} alt="Item preview" className="w-full h-full object-cover" data-testid="item-image-preview" />
+        ) : (
+          <ImagePlus className="w-6 h-6 text-muted-foreground" />
+        )}
+        {src && (
+          <button
+            type="button"
+            className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center"
+            onClick={onClear}
+            data-testid="item-image-clear"
+            aria-label="Remove image"
+          >
+            <X className="w-3 h-3" />
+          </button>
+        )}
+      </div>
+      <div className="flex-1">
+        <Label className="text-[11px] uppercase tracking-widest text-muted-foreground">Item image</Label>
+        <div className="text-[11px] text-muted-foreground mt-0.5 mb-1.5">
+          JPG / PNG / WEBP up to 2&nbsp;MB. Shown on POS tiles and the Items list.
+        </div>
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) onFile(f);
+            e.target.value = "";
+          }}
+          data-testid="item-image-input"
+        />
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="rounded-sm gap-1.5"
+          onClick={() => inputRef.current?.click()}
+          disabled={uploading}
+          data-testid="item-image-pick"
+        >
+          <ImagePlus className="w-3.5 h-3.5" />
+          {uploading ? "Uploading…" : src ? "Replace image" : "Upload image"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function TextileItemForm({ form, setForm, uploadImage, uploadingImg }) {
   const patchRow = (i, patch) => {
     const arr = [...(form.size_stocks || [])];
     arr[i] = { ...arr[i], ...patch };
@@ -682,6 +872,14 @@ function TextileItemForm({ form, setForm }) {
 
   return (
     <div className="grid grid-cols-3 gap-3">
+      <div className="col-span-3">
+        <ItemImagePicker
+          imageUrl={form.image_url}
+          onFile={uploadImage}
+          onClear={() => setForm({ ...form, image_url: "" })}
+          uploading={uploadingImg}
+        />
+      </div>
       <div className="col-span-2">
         <Label>Product Name *</Label>
         <Input data-testid="item-name" value={form.name}
@@ -760,13 +958,24 @@ function TextileItemForm({ form, setForm }) {
       </div>
       <div>
         <Label>GST (%)</Label>
-        <Select value={String(form.gst_rate)}
-          onValueChange={(v) => setForm({ ...form, gst_rate: parseFloat(v) })}>
-          <SelectTrigger className="rounded-sm mt-1"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            {[0, 5, 12, 18, 28].map((r) => <SelectItem key={r} value={String(r)}>{r}%</SelectItem>)}
-          </SelectContent>
-        </Select>
+        <div className="flex gap-2 mt-1">
+          <Input
+            type="number"
+            min="0"
+            max="100"
+            step="0.01"
+            value={form.gst_rate}
+            onChange={(e) => setForm({ ...form, gst_rate: parseFloat(e.target.value) || 0 })}
+            className="rounded-sm"
+            placeholder="Any % e.g. 12.5"
+          />
+          <Select value="" onValueChange={(v) => setForm({ ...form, gst_rate: parseFloat(v) })}>
+            <SelectTrigger className="rounded-sm w-20 shrink-0" aria-label="GST preset"><SelectValue placeholder="—" /></SelectTrigger>
+            <SelectContent>
+              {[0, 3, 5, 12, 18, 28].map((r) => <SelectItem key={r} value={String(r)}>{r}%</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* Size-wise stock grid */}
