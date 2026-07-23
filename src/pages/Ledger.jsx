@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, fmtINR } from "@/lib/apiClient";
+import { useAuth } from "@/contexts/AuthContext";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,6 +18,7 @@ import {
 import { Users, Truck, Wallet } from "lucide-react";
 
 export default function Ledger() {
+  const { industry } = useAuth();
   const [customers, setCustomers] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [cid, setCid] = useState("");
@@ -26,10 +28,14 @@ export default function Ledger() {
   const [cashFlow, setCashFlow] = useState(null);
 
   useEffect(() => {
+    setCid("");
+    setSid("");
+    setCustLedger(null);
+    setSupLedger(null);
     api.get("/customers").then((r) => setCustomers(r.data));
     api.get("/suppliers").then((r) => setSuppliers(r.data));
     api.get("/reports/cash-flow", { params: { months: 6 } }).then((r) => setCashFlow(r.data));
-  }, []);
+  }, [industry]);
   useEffect(() => { if (cid) api.get(`/reports/customer-ledger/${cid}`).then((r) => setCustLedger(r.data)); }, [cid]);
   useEffect(() => { if (sid) api.get(`/reports/supplier-ledger/${sid}`).then((r) => setSupLedger(r.data)); }, [sid]);
 

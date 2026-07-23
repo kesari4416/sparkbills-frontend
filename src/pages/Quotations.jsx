@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, formatApiError } from "@/lib/apiClient";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,6 +31,7 @@ const emptyForm = {
 };
 
 export default function Quotations() {
+  const { industry } = useAuth();
   const [rows, setRows] = useState([]);
   const [items, setItems] = useState([]);
   const [customers, setCustomers] = useState([]);
@@ -50,7 +52,7 @@ export default function Quotations() {
       setCustomers(c.data || []);
     } catch (e) { toast.error(formatApiError(e)); }
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [industry]);
 
   const filtered = useMemo(() => {
     if (!q) return rows;

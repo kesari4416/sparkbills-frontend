@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, formatApiError, API } from "@/lib/apiClient";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,6 +35,7 @@ const empty = {
 };
 
 export default function Deliveries() {
+  const { industry } = useAuth();
   const [rows, setRows] = useState([]);
   const [summary, setSummary] = useState({});
   const [technicians, setTechnicians] = useState([]);
@@ -58,7 +60,7 @@ export default function Deliveries() {
       );
     } catch (e) { toast.error(formatApiError(e)); }
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [industry]);
 
   const openNew = () => { setEditing(null); setForm(empty); setOpen(true); };
   const openEdit = (d) => { setEditing(d); setForm({ ...empty, ...d }); setOpen(true); };

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, formatApiError, fmtINR } from "@/lib/apiClient";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,12 +25,15 @@ export default function Customers() {
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(empty);
+  const { industry } = useAuth();
 
   const load = async () => {
     const { data } = await api.get("/customers", { params: { search } });
     setItems(data);
   };
-  useEffect(() => { const t = setTimeout(load, 200); return () => clearTimeout(t); }, [search]);
+  // Refetch when the search text changes OR the user switches industry
+  // workspace — otherwise a Cafe user could still see Restaurant customers.
+  useEffect(() => { const t = setTimeout(load, 200); return () => clearTimeout(t); }, [search, industry]);
 
   const openNew = () => { setEditingId(null); setForm(empty); setOpen(true); };
   const openEdit = (c) => {

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, formatApiError } from "@/lib/apiClient";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -16,6 +17,7 @@ const STATUS_COLORS = {
 };
 
 export default function Orders() {
+  const { industry } = useAuth();
   const [rows, setRows] = useState([]);
   const [q, setQ] = useState("");
 
@@ -25,7 +27,7 @@ export default function Orders() {
       setRows(data);
     } catch (e) { toast.error(formatApiError(e)); }
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [industry]);
 
   const filtered = useMemo(() => {
     if (!q) return rows;

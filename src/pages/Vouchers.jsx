@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, fmtINR, formatApiError } from "@/lib/apiClient";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,6 +35,7 @@ const empty = { voucher_type: "expense", amount: 0, method: "cash",
                 date: new Date().toISOString().slice(0, 10) };
 
 export default function Vouchers() {
+  const { industry } = useAuth();
   const [rows, setRows] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
@@ -47,7 +49,7 @@ export default function Vouchers() {
     ]);
     setRows(v.data); setCustomers(c.data); setSuppliers(s.data);
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [industry]);
 
   const save = async () => {
     if (!form.amount) return toast.error("Enter amount");

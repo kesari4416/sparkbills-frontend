@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, formatApiError, fmtINR } from "@/lib/apiClient";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,8 +24,10 @@ export default function Suppliers() {
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(empty);
+  const { industry } = useAuth();
   const load = async () => setItems((await api.get("/suppliers")).data);
-  useEffect(() => { load(); }, []);
+  // Refetch on workspace switch so the list matches the active industry.
+  useEffect(() => { load(); }, [industry]);
 
   const openNew = () => { setEditingId(null); setForm(empty); setOpen(true); };
   const openEdit = (s) => {

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, fmtINR, formatApiError } from "@/lib/apiClient";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,6 +16,7 @@ import { toast } from "sonner";
 import { Clock, DoorOpen, DoorClosed, Receipt, TrendingDown, TrendingUp } from "lucide-react";
 
 export default function Shift() {
+  const { industry } = useAuth();
   const [status, setStatus] = useState(null); // {open, shift, summary}
   const [openOpen, setOpenOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
@@ -33,7 +35,7 @@ export default function Shift() {
       setHistory(h);
     } catch (e) { toast.error(formatApiError(e)); }
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [industry]);
 
   const openShift = async () => {
     setBusy(true);

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, fmtINR, formatApiError } from "@/lib/apiClient";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,6 +22,7 @@ import { toast } from "sonner";
 import { Plus, Trash2, Package, ArrowLeftRight, PackageMinus, Search } from "lucide-react";
 
 export default function StockOps() {
+  const { industry } = useAuth();
   const [items, setItems] = useState([]);
   const [branches, setBranches] = useState([]);
   const [adjustments, setAdjustments] = useState([]);
@@ -40,7 +42,7 @@ export default function StockOps() {
     ]);
     setItems(i.data); setBranches(b.data); setAdjustments(a.data); setTransfers(t.data);
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [industry]);
 
   const filteredItems = useMemo(() => {
     const s = pickerQ.toLowerCase();

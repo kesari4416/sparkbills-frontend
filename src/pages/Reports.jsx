@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, fmtINR } from "@/lib/apiClient";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,6 +22,7 @@ function useRange() {
 }
 
 export default function Reports() {
+  const { industry } = useAuth();
   const { from, to, setFrom, setTo } = useRange();
   const [gstr1, setGstr1] = useState(null);
   const [gstr3b, setGstr3b] = useState(null);
@@ -45,7 +47,7 @@ export default function Reports() {
     api.get("/reports/trial-balance", { params: p }).then((r) => setTb(r.data)).catch(() => setTb(null));
   };
   useEffect(() => { load(); }, []);
-  useEffect(() => { load(); }, [from, to]);
+  useEffect(() => { load(); }, [from, to, industry]);
 
   return (
     <div className="p-6 lg:p-8" data-testid="reports-page">

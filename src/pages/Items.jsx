@@ -267,7 +267,9 @@ export default function Items() {
     setItems(data);
   };
 
-  useEffect(() => { load(); }, [type]);
+  // Refetch the items list whenever the industry workspace changes so a
+  // Cafe user never sees Hardware SKUs leaking through after switching.
+  useEffect(() => { load(); }, [type, industry]);
   useEffect(() => {
     const t = setTimeout(load, 250);
     return () => clearTimeout(t);

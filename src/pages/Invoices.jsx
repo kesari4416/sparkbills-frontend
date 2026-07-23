@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, fmtINR, API } from "@/lib/apiClient";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -31,6 +32,7 @@ export default function Invoices({ docType }) {
   const [status, setStatus] = useState("all");
   const [search, setSearch] = useState("");
   const navigate = useNavigate();
+  const { industry } = useAuth();
 
   const load = async () => {
     const params = {};
@@ -39,7 +41,10 @@ export default function Invoices({ docType }) {
     const { data } = await api.get("/invoices", { params });
     setItems(data);
   };
-  useEffect(() => { load(); }, [docType, status]);
+  // Depend on `industry` so switching workspaces refetches the list.
+  // Without it, React held onto the previously-loaded industry's rows and
+  // the user saw invoices from every industry mixed together.
+  useEffect(() => { load(); }, [docType, status, industry]);
 
   const filtered = items.filter((i) =>
     !search ||

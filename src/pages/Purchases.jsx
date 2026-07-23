@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, fmtINR, formatApiError } from "@/lib/apiClient";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,6 +28,7 @@ export default function Purchases() {
     due_date: "", items: [], round_off: true, notes: "",
   });
   const [itemSearch, setItemSearch] = useState("");
+  const { industry } = useAuth();
 
   const load = async () => {
     const [b, s, i] = await Promise.all([
@@ -34,7 +36,9 @@ export default function Purchases() {
     ]);
     setBills(b.data); setSuppliers(s.data); setItems(i.data);
   };
-  useEffect(() => { load(); }, []);
+  // Refetch bills+suppliers+items whenever the industry workspace changes so
+  // a Cafe user never sees Hardware purchase bills leaking through.
+  useEffect(() => { load(); }, [industry]);
 
   const filteredItems = useMemo(() => {
     const s = itemSearch.toLowerCase();
