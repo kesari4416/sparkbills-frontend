@@ -1,8 +1,9 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  Rocket, Building2, LayoutDashboard, ArrowLeft, LogOut, Sparkles, History,
+  Rocket, Building2, LayoutDashboard, ArrowLeft, LogOut, Sparkles, History, Layers,
 } from "lucide-react";
+import { useLocation } from "react-router-dom";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator,
@@ -12,12 +13,17 @@ import { Button } from "@/components/ui/button";
 const NAV = [
   { to: "/platform", label: "Platform Overview", icon: LayoutDashboard, end: true },
   { to: "/platform/tenants", label: "Clients", icon: Building2 },
+  // "Client Details" is a virtual entry — highlights whenever the user is on
+  // /platform/tenants/:tid (routing lives in App.js). Clicking it takes them
+  // back to the Clients list where they can pick one to inspect.
+  { to: "/platform/tenants", label: "Client Details", icon: Layers, matchPath: "/platform/tenants/" },
   { to: "/platform/audit", label: "Impersonation Log", icon: History },
 ];
 
 export default function PlatformLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   return (
     <div className="flex h-screen bg-[#050B1E] text-white overflow-hidden">
@@ -38,23 +44,28 @@ export default function PlatformLayout() {
         <nav className="flex-1 overflow-y-auto scrollbar-thin py-4 px-2 space-y-1">
           {NAV.map((item) => {
             const Icon = item.icon;
+            // Custom-active detection lets "Client Details" light up on the
+            // detail route without stealing the highlight on the base list.
+            const active = item.matchPath
+              ? location.pathname.startsWith(item.matchPath)
+              : item.end
+                ? location.pathname === item.to
+                : location.pathname.startsWith(item.to) && !location.pathname.startsWith("/platform/tenants/");
             return (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.end}
+              <button
+                type="button"
+                key={item.label}
+                onClick={() => navigate(item.to)}
                 data-testid={`platform-nav-${item.label.toLowerCase().replace(/ /g, "-")}`}
-                className={({ isActive }) =>
-                  `flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-all ${
-                    isActive
-                      ? "bg-blue-600/25 text-white shadow-md shadow-blue-900/30 ring-1 ring-blue-500/30"
-                      : "text-blue-100/60 hover:bg-white/5 hover:text-white"
-                  }`
-                }
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-all text-left ${
+                  active
+                    ? "bg-blue-600/25 text-white shadow-md shadow-blue-900/30 ring-1 ring-blue-500/30"
+                    : "text-blue-100/60 hover:bg-white/5 hover:text-white"
+                }`}
               >
                 <Icon className="w-[18px] h-[18px] shrink-0" strokeWidth={1.75} />
                 <span className="truncate flex-1">{item.label}</span>
-              </NavLink>
+              </button>
             );
           })}
         </nav>

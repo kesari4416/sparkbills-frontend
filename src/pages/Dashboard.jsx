@@ -45,15 +45,133 @@ const INDUSTRY_MODULE_CARDS = {
   electronics: { label: "Electronics",     icon: Package,         to: "/app/electronics" },
 };
 
+// Per-industry copy for the greeting subtitle, KPI/section labels, and
+// the Quick Actions row so a Tea Shop dashboard doesn't read like a
+// Textile boutique. Any industry key not listed falls back to the generic
+// copy so we never crash on an unrecognised value.
+const INDUSTRY_META = {
+  cafe: {
+    subtitle: "Here's what's brewing at your tea & snacks shop today.",
+    catalogueLabel: "Menu Items",
+    catalogueAction: "Add Menu Item",
+    catalogueRoute: "/app/items",
+    posLabel: "Open Tea Shop POS",
+    posRoute: "/app/restaurant",
+    topItemsTitle: "Top Selling Snacks & Beverages",
+    topItemsEmpty: "Sell items to see the leaderboard",
+    lowStockTitle: "Low Stock Ingredients",
+    lowStockEmpty: "All ingredients well stocked 🎯",
+  },
+  restaurant: {
+    subtitle: "Here's what's cooking in your restaurant today.",
+    catalogueLabel: "Menu Items",
+    catalogueAction: "Add Menu Item",
+    catalogueRoute: "/app/items",
+    posLabel: "Open Restaurant POS",
+    posRoute: "/app/restaurant",
+    topItemsTitle: "Top Selling Menu Items",
+    topItemsEmpty: "Take orders to see the leaderboard",
+    lowStockTitle: "Low Stock Ingredients",
+    lowStockEmpty: "Kitchen stock is healthy 🎯",
+  },
+  retail: {
+    subtitle: "Here's how your supermarket is trading today.",
+    catalogueLabel: "Products",
+    catalogueAction: "Add Product",
+    catalogueRoute: "/app/items",
+    posLabel: "Open Retail POS",
+    posRoute: "/app/pos",
+    topItemsTitle: "Top Selling SKUs",
+    topItemsEmpty: "Bill a few items to unlock the leaderboard",
+    lowStockTitle: "Low Stock Alerts",
+    lowStockEmpty: "Everything is well stocked 🎯",
+  },
+  fruits_veg: {
+    subtitle: "Here's how your fresh produce is moving today.",
+    catalogueLabel: "Produce",
+    catalogueAction: "Add Produce",
+    catalogueRoute: "/app/items",
+    posLabel: "Open F&V POS",
+    posRoute: "/app/pos",
+    topItemsTitle: "Best Selling Produce",
+    topItemsEmpty: "Weigh & bill produce to see top sellers",
+    lowStockTitle: "Running-Low Produce",
+    lowStockEmpty: "Crates are full 🎯",
+  },
+  textile: {
+    subtitle: "Here's how your textile shop is running today.",
+    catalogueLabel: "Textile Catalog",
+    catalogueAction: "Add Textile",
+    catalogueRoute: "/app/items",
+    posLabel: "Open Textile POS",
+    posRoute: "/app/pos",
+    topItemsTitle: "Top Selling Textiles",
+    topItemsEmpty: "Sell garments to see the leaderboard",
+    lowStockTitle: "Low Stock (by Size)",
+    lowStockEmpty: "Every size is stocked 🎯",
+  },
+  pharmacy: {
+    subtitle: "Here's how your pharmacy is dispensing today.",
+    catalogueLabel: "Medicines",
+    catalogueAction: "Add Medicine",
+    catalogueRoute: "/app/items",
+    posLabel: "Open Pharmacy Board",
+    posRoute: "/app/pharmacy",
+    topItemsTitle: "Top Selling Medicines",
+    topItemsEmpty: "Fill a few prescriptions to see top movers",
+    lowStockTitle: "Low Stock / Near-Expiry",
+    lowStockEmpty: "Shelves fully stocked 🎯",
+  },
+  hardware: {
+    subtitle: "Here's how your hardware store is trading today.",
+    catalogueLabel: "Hardware Catalog",
+    catalogueAction: "Add Hardware",
+    catalogueRoute: "/app/items",
+    posLabel: "Open Hardware POS",
+    posRoute: "/app/pos",
+    topItemsTitle: "Top Selling Hardware SKUs",
+    topItemsEmpty: "Bill items to unlock the leaderboard",
+    lowStockTitle: "Low Stock SKUs",
+    lowStockEmpty: "Warehouse is well stocked 🎯",
+  },
+  electronics: {
+    subtitle: "Here's how your appliance showroom is doing today.",
+    catalogueLabel: "Appliance Catalog",
+    catalogueAction: "Add Appliance",
+    catalogueRoute: "/app/items",
+    posLabel: "Open Electronics Board",
+    posRoute: "/app/electronics",
+    topItemsTitle: "Top Selling Appliances",
+    topItemsEmpty: "Bill appliances to see the leaderboard",
+    lowStockTitle: "Low Stock Appliances",
+    lowStockEmpty: "Warehouse is well stocked 🎯",
+  },
+};
+
+const DEFAULT_INDUSTRY_META = {
+  subtitle: "Here's what's happening with your business today.",
+  catalogueLabel: "Products",
+  catalogueAction: "Add Product",
+  catalogueRoute: "/app/items",
+  posLabel: "Open POS",
+  posRoute: "/app/pos",
+  topItemsTitle: "Top Selling Items",
+  topItemsEmpty: "Sell items to see the leaderboard",
+  lowStockTitle: "Low Stock Items",
+  lowStockEmpty: "Everything is well stocked 🎯",
+};
+
 export default function Dashboard() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const { user, businessPerms } = useAuth();
+  const { user, businessPerms, industry } = useAuth();
   const navigate = useNavigate();
+  const meta = INDUSTRY_META[industry] || DEFAULT_INDUSTRY_META;
 
   useEffect(() => {
+    setLoading(true);
     api.get("/dashboard").then((r) => setData(r.data)).finally(() => setLoading(false));
-  }, []);
+  }, [industry]);
 
   if (loading || !data) {
     return (
@@ -90,8 +208,8 @@ export default function Dashboard() {
     { label: "New Invoice", icon: ReceiptText, color: "bg-blue-50 text-blue-600 border-blue-100", to: "/app/invoices/new" },
     { label: "New Purchase", icon: ShoppingCart, color: "bg-emerald-50 text-emerald-600 border-emerald-100", to: "/app/purchases" },
     { label: "Add Customer", icon: UserPlus, color: "bg-violet-50 text-violet-600 border-violet-100", to: "/app/customers" },
-    { label: "Add Product", icon: Package, color: "bg-amber-50 text-amber-600 border-amber-100", to: "/app/items" },
-    { label: "Receive Payment", icon: DollarSign, color: "bg-emerald-50 text-emerald-600 border-emerald-100", to: "/app/invoices" },
+    { label: meta.catalogueAction, icon: Package, color: "bg-amber-50 text-amber-600 border-amber-100", to: meta.catalogueRoute },
+    { label: meta.posLabel, icon: Store, color: "bg-indigo-50 text-indigo-600 border-indigo-100", to: meta.posRoute },
     { label: "Expense Entry", icon: CreditCard, color: "bg-rose-50 text-rose-600 border-rose-100", to: "/app/purchases" },
   ];
 
@@ -133,8 +251,8 @@ export default function Dashboard() {
             Good morning, {user?.name || "Admin"}!{" "}
             <span className="inline-block animate-wave">👋</span>
           </h1>
-          <div className="text-sm text-muted-foreground mt-1">
-            Here's what's happening with your business today.
+          <div className="text-sm text-muted-foreground mt-1" data-testid="dashboard-subtitle">
+            {meta.subtitle}
           </div>
         </div>
         <div className="flex items-center gap-2 px-3 h-10 rounded-md border border-border bg-card text-sm">
@@ -229,12 +347,12 @@ export default function Dashboard() {
 
         <Card className="p-5 rounded-xl card-elev">
           <div className="flex items-center justify-between mb-4">
-            <div className="font-heading text-base font-semibold">Top Selling Items</div>
+            <div className="font-heading text-base font-semibold" data-testid="top-items-title">{meta.topItemsTitle}</div>
             <button className="text-xs text-primary font-medium hover:underline" onClick={() => navigate("/app/reports")}>View All</button>
           </div>
           <div className="space-y-3">
             {(data.top_items || []).length === 0 && (
-              <div className="text-sm text-muted-foreground py-6 text-center">Sell items to see the leaderboard</div>
+              <div className="text-sm text-muted-foreground py-6 text-center">{meta.topItemsEmpty}</div>
             )}
             {(data.top_items || []).slice(0, 5).map((it, i) => (
               <div key={it.name} className="flex items-center gap-3">
@@ -289,12 +407,12 @@ export default function Dashboard() {
 
         <Card className="p-5 rounded-xl card-elev">
           <div className="flex items-center justify-between mb-3">
-            <div className="font-heading text-base font-semibold">Low Stock Items</div>
+            <div className="font-heading text-base font-semibold" data-testid="low-stock-title">{meta.lowStockTitle}</div>
             <button className="text-xs text-primary font-medium hover:underline" onClick={() => navigate("/app/items")}>View All</button>
           </div>
           <Table>
             <TableHeader><TableRow className="hover:bg-transparent border-border">
-              <TableHead className="text-[10px] uppercase tracking-widest h-9">Item</TableHead>
+              <TableHead className="text-[10px] uppercase tracking-widest h-9">{meta.catalogueLabel.replace(/s$/, "")}</TableHead>
               <TableHead className="text-[10px] uppercase tracking-widest h-9 text-right">Current Stock</TableHead>
               <TableHead className="text-[10px] uppercase tracking-widest h-9 text-right">Alert Level</TableHead>
             </TableRow></TableHeader>
@@ -307,7 +425,7 @@ export default function Dashboard() {
                 </TableRow>
               ))}
               {(data.low_stock || []).length === 0 && (
-                <TableRow><TableCell colSpan={3} className="text-center py-10 text-sm text-muted-foreground">Everything is well stocked 🎯</TableCell></TableRow>
+                <TableRow><TableCell colSpan={3} className="text-center py-10 text-sm text-muted-foreground">{meta.lowStockEmpty}</TableCell></TableRow>
               )}
             </TableBody>
           </Table>

@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import {
-  Plus, Search, Building2, PauseCircle, PlayCircle, Trash2, Users, Receipt, IndianRupee, LogIn,
+  Plus, Search, Building2, PauseCircle, PlayCircle, Trash2, Users, Receipt, IndianRupee, LogIn, Eye,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -266,6 +266,10 @@ export default function PlatformTenants() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1.5">
+                      <Button variant="outline" size="sm" className="h-8 rounded-sm gap-1.5 bg-transparent border-white/10 text-blue-200 hover:bg-white/5"
+                        onClick={() => navigate(`/platform/tenants/${t.id}`)} data-testid={`view-tenant-${t.id}`}>
+                        <Eye className="w-3.5 h-3.5" /> View
+                      </Button>
                       <Button variant="outline" size="sm" className="h-8 rounded-sm gap-1.5 bg-transparent border-blue-500/40 text-blue-300 hover:bg-blue-500/10"
                         onClick={() => impersonate(t)} disabled={impersonating === t.id} data-testid={`impersonate-${t.id}`}>
                         <LogIn className="w-3.5 h-3.5" /> {impersonating === t.id ? "…" : "Login as"}

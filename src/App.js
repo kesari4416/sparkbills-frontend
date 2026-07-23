@@ -30,6 +30,7 @@ import Orders from "@/pages/Orders";
 import PlatformLayout from "@/layouts/PlatformLayout";
 import PlatformDashboard from "@/pages/PlatformDashboard";
 import PlatformTenants from "@/pages/PlatformTenants";
+import PlatformClientDetail from "@/pages/PlatformClientDetail";
 import PlatformImpersonationAudit from "@/pages/PlatformImpersonationAudit";
 
 function Protected({ children }) {
@@ -74,6 +75,7 @@ function AppRoutes() {
       >
         <Route index element={<PlatformDashboard />} />
         <Route path="tenants" element={<PlatformTenants />} />
+        <Route path="tenants/:tid" element={<PlatformClientDetail />} />
         <Route path="audit" element={<PlatformImpersonationAudit />} />
       </Route>
       <Route
