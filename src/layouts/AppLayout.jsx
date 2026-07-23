@@ -34,7 +34,7 @@ const INDUSTRIES = [
 // `labels`    = optional per-industry label override.
 const NAV = [
   { to: "/app", label: "Dashboard", icon: LayoutDashboard, end: true, module: "dashboard" },
-  { to: "/app/pos", label: "Retail POS", icon: Store, industries: ["retail", "fruits_veg", "pharmacy", "textile", "electronics"], labels: { fruits_veg: "F&V POS", textile: "Textile POS", electronics: "Electronics POS" }, module: "pos_retail" },
+  { to: "/app/pos", label: "Retail POS", icon: Store, industries: ["retail", "fruits_veg", "pharmacy", "textile", "electronics", "hardware"], labels: { fruits_veg: "F&V POS", textile: "Textile POS", electronics: "Electronics POS", hardware: "Hardware POS", pharmacy: "Pharmacy Counter POS" }, module: "pos_retail" },
   {
     to: "/app/restaurant",
     label: "POS (Restaurant)",
