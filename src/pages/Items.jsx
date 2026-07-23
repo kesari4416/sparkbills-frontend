@@ -108,9 +108,12 @@ export default function Items() {
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const { data } = await api.post("/items/upload-image", fd, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      // IMPORTANT: do NOT set a Content-Type header here — axios/the browser
+      // must auto-generate `multipart/form-data; boundary=...` from the
+      // FormData instance. Explicitly setting it without the boundary was
+      // making FastAPI reject the upload with a 500 (Request failed with
+      // status code 500) because python-multipart couldn't parse the body.
+      const { data } = await api.post("/items/upload-image", fd);
       setForm((f) => ({ ...f, image_url: data.url }));
       toast.success("Image uploaded");
     } catch (e) { toast.error(formatApiError(e)); }
@@ -562,18 +565,23 @@ export default function Items() {
                       <div className="text-xs text-muted-foreground">No add-ons defined.</div>
                     ) : (
                       <div className="space-y-2">
+                        <div className="grid grid-cols-[1fr_96px_32px] gap-2 text-[10px] uppercase tracking-widest text-muted-foreground font-semibold px-0.5">
+                          <span>Add-on Name</span>
+                          <span className="text-right">Extra Price (₹)</span>
+                          <span></span>
+                        </div>
                         {form.addons.map((a, i) => (
-                          <div key={i} className="flex gap-2 items-center">
-                            <Input placeholder="Add-on name" value={a.name}
+                          <div key={i} className="grid grid-cols-[1fr_96px_32px] gap-2 items-center">
+                            <Input placeholder="e.g. Extra cheese" value={a.name}
                               onChange={(e) => {
                                 const arr = [...form.addons]; arr[i] = { ...a, name: e.target.value };
                                 setForm({ ...form, addons: arr });
-                              }} className="rounded-sm h-8 flex-1" data-testid={`addon-name-${i}`} />
-                            <Input type="number" placeholder="₹" value={a.price}
+                              }} className="rounded-sm h-8" data-testid={`addon-name-${i}`} />
+                            <Input type="number" placeholder="0.00" value={a.price}
                               onChange={(e) => {
                                 const arr = [...form.addons]; arr[i] = { ...a, price: parseFloat(e.target.value) || 0 };
                                 setForm({ ...form, addons: arr });
-                              }} className="rounded-sm h-8 w-24 text-right tabular" data-testid={`addon-price-${i}`} />
+                              }} className="rounded-sm h-8 text-right tabular" data-testid={`addon-price-${i}`} />
                             <Button type="button" size="icon" variant="ghost" className="h-8 w-8"
                               onClick={() => setForm({ ...form, addons: form.addons.filter((_, x) => x !== i) })}>
                               <Trash2 className="w-3.5 h-3.5" />
@@ -596,18 +604,23 @@ export default function Items() {
                       <div className="text-xs text-muted-foreground">No variants defined.</div>
                     ) : (
                       <div className="space-y-2">
+                        <div className="grid grid-cols-[1fr_96px_32px] gap-2 text-[10px] uppercase tracking-widest text-muted-foreground font-semibold px-0.5">
+                          <span>Variant Name</span>
+                          <span className="text-right">Price Delta (₹)</span>
+                          <span></span>
+                        </div>
                         {form.variants.map((v, i) => (
-                          <div key={i} className="flex gap-2 items-center">
-                            <Input placeholder="Variant name" value={v.name}
+                          <div key={i} className="grid grid-cols-[1fr_96px_32px] gap-2 items-center">
+                            <Input placeholder="e.g. Small / Medium / Large" value={v.name}
                               onChange={(e) => {
                                 const arr = [...form.variants]; arr[i] = { ...v, name: e.target.value };
                                 setForm({ ...form, variants: arr });
-                              }} className="rounded-sm h-8 flex-1" data-testid={`variant-name-${i}`} />
-                            <Input type="number" placeholder="± ₹" value={v.price_delta}
+                              }} className="rounded-sm h-8" data-testid={`variant-name-${i}`} />
+                            <Input type="number" placeholder="+ / − ₹" value={v.price_delta}
                               onChange={(e) => {
                                 const arr = [...form.variants]; arr[i] = { ...v, price_delta: parseFloat(e.target.value) || 0 };
                                 setForm({ ...form, variants: arr });
-                              }} className="rounded-sm h-8 w-24 text-right tabular" data-testid={`variant-price-${i}`} />
+                              }} className="rounded-sm h-8 text-right tabular" data-testid={`variant-price-${i}`} />
                             <Button type="button" size="icon" variant="ghost" className="h-8 w-8"
                               onClick={() => setForm({ ...form, variants: form.variants.filter((_, x) => x !== i) })}>
                               <Trash2 className="w-3.5 h-3.5" />

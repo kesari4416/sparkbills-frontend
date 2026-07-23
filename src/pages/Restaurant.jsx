@@ -193,7 +193,8 @@ export default function Restaurant() {
     if (!cart.length) return toast.error("Add items first");
     if (!useToken && !selectedTable) return toast.error("Select a table first");
     try {
-      const { data } = await api.post("/kots", {
+      // 1. Send the order to the kitchen (KOTs collection).
+      const { data: kot } = await api.post("/kots", {
         table_id: selectedTable?.id || null,
         order_type: orderType,
         customer_name: selectedCustomer?.name || "",
@@ -202,8 +203,43 @@ export default function Restaurant() {
         waiter_name: waiterName(selectedWaiter),
         items: cart,
       });
-      const idLabel = useToken ? `Token ${data.token_no}` : `Table ${selectedTable?.name || "-"}`;
-      toast.success(`Order sent to kitchen · ${idLabel}${data.waiter_name ? ` · ${data.waiter_name}` : ""}`);
+      // 2. Also persist an UNPAID bill for the same line-items so the
+      // cashier can complete final payment later. Before this fix the
+      // cart data lived only inside the KOT — resetCart() wiped it and
+      // the customer's total was lost.
+      const idLabel = useToken ? `Token ${kot.token_no}` : `Table ${selectedTable?.name || "-"}`;
+      let bill = null;
+      try {
+        const billPayload = {
+          doc_type: "invoice",
+          customer_id: selectedCustomer?.id || null,
+          customer_name: selectedCustomer?.name || (useToken ? `Token ${kot.token_no}` : `Table ${selectedTable?.name || ""}`),
+          customer_phone: selectedCustomer?.phone || "",
+          customer_state_code: selectedCustomer?.state_code || "",
+          order_type: orderType,
+          table_id: selectedTable?.id || null,
+          items: cart,
+          discount_amount: Number(discount) || 0,
+          round_off: true,
+          notes: [
+            `KOT ${kot.kot_number}`,
+            packaging ? `Packaging ₹${packaging}` : null,
+            deliveryFee ? `Delivery ₹${deliveryFee}` : null,
+          ].filter(Boolean).join(" · "),
+          payments: [], // unpaid — cashier records payment from the Bills screen later
+        };
+        const { data } = await api.post("/invoices", billPayload);
+        bill = data;
+      } catch (billErr) {
+        // Don't block the kitchen if the bill save fails — surface the
+        // reason and still show the KOT confirmation.
+        toast.error(`KOT sent, but bill could not be saved: ${formatApiError(billErr)}`);
+      }
+      if (bill) {
+        toast.success(`Order sent · ${idLabel} · Bill ${bill.number} saved (UNPAID)`);
+      } else {
+        toast.success(`Order sent to kitchen · ${idLabel}${kot.waiter_name ? ` · ${kot.waiter_name}` : ""}`);
+      }
       if (selectedWaiter) localStorage.setItem("last_waiter_id", selectedWaiter);
       loadAll();
       resetCart();
@@ -213,7 +249,7 @@ export default function Restaurant() {
   const payAndBill = async () => {
     if (!cart.length) return toast.error("Add items first");
     const payload = {
-      doc_type: "invoice", industry: "restaurant",
+      doc_type: "invoice",
       customer_id: selectedCustomer?.id || null,
       customer_name: selectedCustomer?.name || "Walk-in Customer",
       customer_phone: selectedCustomer?.phone || "",
@@ -398,11 +434,23 @@ export default function Restaurant() {
                 <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">Current Order</div>
                 <div className={`mt-2 grid ${useToken ? "grid-cols-1" : "grid-cols-2"} gap-2`}>
                   {!useToken && (
-                    <Select value={selectedTable?.id || "none"} onValueChange={(v) => setSelectedTable(tables.find((t) => t.id === v) || null)}>
+                    <Select value={selectedTable?.id || "none"} onValueChange={(v) => setSelectedTable(v === "none" ? null : (tables.find((t) => t.id === v) || null))}>
                       <SelectTrigger className="rounded-md h-9 text-xs" data-testid="pos-table"><SelectValue placeholder="Select Table" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="none">No Table</SelectItem>
-                        {tables.map((t) => <SelectItem key={t.id} value={t.id}>Table {t.name}</SelectItem>)}
+                        {(() => {
+                          // Only show tables that are actually free — plus the currently
+                          // selected table if it happens to be marked occupied (so the
+                          // waiter can still see what's active in the dropdown). Fixes
+                          // the "shows all tables" leak in POS → Current Order.
+                          const list = tables.filter((t) => t.status !== "occupied" || t.id === selectedTable?.id);
+                          if (list.length === 0) {
+                            return <div className="px-3 py-2 text-xs text-muted-foreground">All tables are occupied.</div>;
+                          }
+                          return list.map((t) => (
+                            <SelectItem key={t.id} value={t.id}>Table {t.name}{t.section ? ` · ${t.section}` : ""}</SelectItem>
+                          ));
+                        })()}
                       </SelectContent>
                     </Select>
                   )}

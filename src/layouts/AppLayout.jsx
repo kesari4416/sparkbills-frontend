@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { api, fmtINR } from "@/lib/apiClient";
 import {
   LayoutDashboard, Store, UtensilsCrossed, Scissors, Pill,
   Receipt, FileText, ShoppingCart, Users, Truck, Package,
@@ -62,6 +63,87 @@ const NAV = [
   { to: "/app/reports", label: "GST & Reports", icon: BarChart3, module: "reports" },
   { to: "/app/settings", label: "Settings", icon: SettingsIcon, module: "settings" },
 ];
+
+// Live notifications bell — replaces the previous static "8" badge with a
+// real dropdown backed by GET /api/notifications. Auto-refreshes every 60s
+// so recent email sends / SMS retries are visible without a page reload.
+function NotificationsBell() {
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const load = async () => {
+    setLoading(true);
+    try {
+      const { data } = await api.get("/notifications");
+      setItems(Array.isArray(data) ? data : []);
+    } catch { /* silent — the bell should never nag the user */ }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { load(); const t = setInterval(load, 60000); return () => clearInterval(t); }, []);
+  const unread = items.filter((n) => n.status === "failed").length;
+  const iconFor = (t) => (t === "email" ? "✉️" : t === "sms" ? "📱" : "🔔");
+  return (
+    <DropdownMenu open={open} onOpenChange={(v) => { setOpen(v); if (v) load(); }}>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="relative w-10 h-10 flex items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground flex-shrink-0"
+          data-testid="notif-btn"
+          aria-label={`${items.length} notifications`}
+        >
+          <Bell className="w-5 h-5" strokeWidth={1.75} />
+          {items.length > 0 && (
+            <span
+              className={`absolute top-1.5 right-1.5 min-w-[16px] h-4 px-1 rounded-full text-white text-[9px] font-bold flex items-center justify-center ${unread > 0 ? "bg-red-500" : "bg-blue-500"}`}
+              data-testid="notif-badge"
+            >
+              {items.length > 99 ? "99+" : items.length}
+            </span>
+          )}
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-96 max-h-[70vh] overflow-hidden" data-testid="notif-menu">
+        <DropdownMenuLabel className="flex items-center justify-between">
+          <span className="font-heading">Notifications</span>
+          <span className="text-[10px] uppercase tracking-widest text-muted-foreground">{items.length} total{unread ? ` · ${unread} failed` : ""}</span>
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <div className="max-h-[52vh] overflow-y-auto scrollbar-thin">
+          {loading && items.length === 0 && (
+            <div className="p-6 text-center text-sm text-muted-foreground">Loading…</div>
+          )}
+          {!loading && items.length === 0 && (
+            <div className="p-8 text-center text-sm text-muted-foreground" data-testid="notif-empty">
+              <Bell className="w-8 h-8 mx-auto opacity-30 mb-2" />
+              No notifications yet. Emailed invoices and delivery attempts will show up here.
+            </div>
+          )}
+          {items.slice(0, 25).map((n) => (
+            <div key={n.id} className="px-3 py-2.5 border-b border-border last:border-0 hover:bg-secondary/40" data-testid={`notif-item-${n.id}`}>
+              <div className="flex items-start gap-2">
+                <span className="text-base leading-none mt-0.5">{iconFor(n.type)}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <div className="text-sm font-medium truncate">{n.subject || `${(n.type || "notification").toUpperCase()} to ${n.recipient || "—"}`}</div>
+                    <span className={`text-[9px] uppercase tracking-widest font-semibold shrink-0 ${n.status === "failed" ? "text-rose-600" : n.status === "sent" ? "text-emerald-600" : "text-muted-foreground"}`}>{n.status || "queued"}</span>
+                  </div>
+                  <div className="text-[11px] text-muted-foreground mt-0.5 truncate">
+                    {n.recipient}{n.attachment_omitted ? " · attachment omitted" : ""}
+                  </div>
+                  {n.status === "failed" && n.error && (
+                    <div className="text-[11px] text-rose-600 mt-1 line-clamp-2">{n.error}</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+
 
 export default function AppLayout() {
   const { user, industry, changeIndustry, logout, businessPerms, stopImpersonation } = useAuth();
@@ -288,10 +370,7 @@ export default function AppLayout() {
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <button className="relative w-10 h-10 flex items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground flex-shrink-0" data-testid="notif-btn">
-            <Bell className="w-5 h-5" strokeWidth={1.75} />
-            <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">8</span>
-          </button>
+          <NotificationsBell />
           {user?.platform_role === "super_admin" && (
             <Button
               size="sm"
